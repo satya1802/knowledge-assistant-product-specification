@@ -7,37 +7,11 @@ import * as UI from "@/lib/ui";
 import { Icons } from "@/lib/icons";
 import { brand } from "@/lib/brand";
 import { useNavigate } from "@/lib/navigate";
+import { useAuth } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/api";
 
-const { Input, Label, Select, Checkbox, Table, THead, TBody, TR, TH, TD } = UI;
-const { Check, X, Filter, ArrowLeft, AlertCircle, CheckCircle } = Icons;
-
-const USER = {
-  id: "usr_01HQ8",
-  name: "Satya Ganaraju",
-  email: "satya.ganaraju@quorq.ai",
-  is_admin: true,
-  is_enabled: true,
-  created_at: "12 March 2026",
-  initials: "SG",
-};
-
-const INITIAL_ACTIVITY = [
-  { id: "la_9f2", when: "Today, 09:12", device: "Chrome 131 · macOS · 10.4.2.19", status: "success" },
-  { id: "la_9f1", when: "Today, 09:11", device: "Chrome 131 · macOS · 10.4.2.19", status: "failed" },
-  { id: "la_8c7", when: "Yesterday, 17:46", device: "Safari · iPadOS · 10.4.2.88", status: "success" },
-  { id: "la_8c4", when: "Mon 5 Oct, 22:14", device: "Firefox 133 · Windows · 86.21.4.7", status: "locked" },
-  { id: "la_8c3", when: "Mon 5 Oct, 22:13", device: "Firefox 133 · Windows · 86.21.4.7", status: "failed" },
-  { id: "la_8c2", when: "Mon 5 Oct, 22:11", device: "Firefox 133 · Windows · 86.21.4.7", status: "failed" },
-  { id: "la_7b9", when: "Fri 2 Oct, 08:34", device: "Chrome 131 · macOS · 10.4.2.19", status: "success" },
-  { id: "la_7a1", when: "Thu 1 Oct, 09:02", device: "Chrome 131 · macOS · 10.4.2.19", status: "success" },
-];
-
-const STATUS_META = {
-  success: { label: "Signed in", tint: "#5B9CF8" },
-  failed: { label: "Failed attempt", tint: "#F4A259" },
-  locked: { label: "Locked 15 min", tint: "#E5736B" },
-  changed: { label: "Password changed", tint: "#5B9CF8" },
-};
+const { Input, Label, Checkbox } = UI;
+const { Check, X, ArrowLeft, AlertCircle, CheckCircle } = Icons;
 
 const THEME_OPTIONS = [
   { value: "light", label: "Light", hint: "White with soft blue-grey" },
@@ -65,10 +39,12 @@ const LIGHT = {
   field: "#FFFFFF",
 };
 
+// Matches SignIn.tsx's MIN_PW and the server's MIN_PASSWORD_LENGTH (12).
 const MIN_LENGTH = 12;
 
 export default function Screen() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [theme, setTheme] = React.useState("dark");
   const [themeNotice, setThemeNotice] = React.useState("");
   const systemAppearance = "dark";
@@ -81,14 +57,18 @@ export default function Screen() {
   const [reveal, setReveal] = React.useState(false);
   const [errors, setErrors] = React.useState({});
   const [confirmation, setConfirmation] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
   const [lastChanged, setLastChanged] = React.useState("14 August 2026");
-
-  const [activity, setActivity] = React.useState(INITIAL_ACTIVITY);
-  const [activityFilter, setActivityFilter] = React.useState("all");
 
   const longEnough = next.length >= MIN_LENGTH;
   const hasVariety = /[0-9\W_]/.test(next);
   const matches = next.length > 0 && next === confirm;
+
+  const FIELD_BY_API_NAME = {
+    current_password: "current",
+    new_password: "next",
+    confirm_password: "confirm",
+  };
 
   function handleTheme(value) {
     setTheme(value);
@@ -96,26 +76,24 @@ export default function Screen() {
     setThemeNotice(
       value === "system"
         ? "Theme set to System — currently showing Dark. Remembered on this browser."
-        : "Theme set to " + chosen.label + ". Remembered on this browser."
+        : "Theme set to " + chosen.label + ". Remembered on this browser.",
     );
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     const nextErrors = {};
 
+    // Client-side validation mirrors the server's rules to give fast
+    // feedback; it never replaces the server's own checks below.
     if (!current) {
       nextErrors.current = "Enter your current password.";
-    } else if (current.length < 8) {
-      nextErrors.current = "That does not match your current password.";
     }
 
     if (!next) {
       nextErrors.next = "Enter a new password.";
     } else if (!longEnough) {
       nextErrors.next = "Use at least " + MIN_LENGTH + " characters.";
-    } else if (next === current) {
-      nextErrors.next = "Choose a password different from your current one.";
     }
 
     if (!confirm) {
@@ -131,28 +109,55 @@ export default function Screen() {
       return;
     }
 
-    setCurrent("");
-    setNext("");
-    setConfirm("");
-    setReveal(false);
-    setLastChanged("Today, just now");
-    setConfirmation(
-      "Password changed. Your other sessions stay signed in — use this password next time you sign in."
-    );
-    setActivity((rows) => [
-      {
-        id: "la_" + Math.random().toString(36).slice(2, 6),
-        when: "Today, just now",
-        device: "Chrome 131 · macOS · 10.4.2.19",
-        status: "changed",
-      },
-      ...rows,
-    ]);
-  }
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current_password: current,
+          new_password: next,
+          confirm_password: confirm,
+        }),
+      });
 
-  const visibleActivity = activity.filter((row) =>
-    activityFilter === "all" ? true : row.status === activityFilter
-  );
+      let body = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+
+      if (response.ok) {
+        setErrors({});
+        setCurrent("");
+        setNext("");
+        setConfirm("");
+        setReveal(false);
+        setLastChanged("Today, just now");
+        setConfirmation(
+          (body && body.detail) || "Password changed.",
+        );
+        return;
+      }
+
+      setConfirmation("");
+      if (body && body.field) {
+        const fieldKey = FIELD_BY_API_NAME[body.field] || body.field;
+        setErrors({ [fieldKey]: body.detail || "That did not work. Try again." });
+      } else {
+        setErrors({
+          current: (body && body.detail) || "That did not work. Try again.",
+        });
+      }
+    } catch {
+      setConfirmation("");
+      setErrors({ current: "Could not reach the server. Try again." });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   const fieldStyle = {
     backgroundColor: p.field,
@@ -231,46 +236,54 @@ export default function Screen() {
               className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-semibold"
               style={{ backgroundColor: "rgba(91,156,248,0.18)", color: "#5B9CF8" }}
             >
-              {USER.initials}
+              {(user?.name || "")
+                .split(" ")
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((part) => part[0]?.toUpperCase())
+                .join("")}
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-lg font-semibold" style={{ color: p.text }}>
-                {USER.name}
+                {user?.name}
               </p>
               <p className="truncate text-sm" style={{ color: p.muted }}>
-                {USER.email}
+                {user?.email}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
-                style={{
-                  backgroundColor: "rgba(91,156,248,0.14)",
-                  color: "#5B9CF8",
-                  border: "1px solid rgba(91,156,248,0.35)",
-                }}
-              >
-                <Icons.Check className="h-3.5 w-3.5" aria-hidden="true" />
-                Administrator
-              </span>
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
-                style={{ backgroundColor: p.surfaceAlt, color: p.muted, border: "1px solid " + p.border }}
-              >
-                Enabled
-              </span>
+              {user?.is_admin ? (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+                  style={{
+                    backgroundColor: "rgba(91,156,248,0.14)",
+                    color: "#5B9CF8",
+                    border: "1px solid rgba(91,156,248,0.35)",
+                  }}
+                >
+                  <Icons.Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  Administrator
+                </span>
+              ) : null}
+              {user?.is_enabled !== false ? (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+                  style={{
+                    backgroundColor: p.surfaceAlt,
+                    color: p.muted,
+                    border: "1px solid " + p.border,
+                  }}
+                >
+                  Enabled
+                </span>
+              ) : null}
             </div>
           </div>
 
-          <dl className="mt-6 grid gap-5 border-t pt-5 sm:grid-cols-3" style={{ borderColor: p.border }}>
-            <div>
-              <dt className="text-xs uppercase tracking-wide" style={{ color: p.muted }}>
-                Member since
-              </dt>
-              <dd className="mt-1 text-sm" style={{ color: p.text }}>
-                {USER.created_at}
-              </dd>
-            </div>
+          <dl
+            className="mt-6 grid gap-5 border-t pt-5 sm:grid-cols-2"
+            style={{ borderColor: p.border }}
+          >
             <div>
               <dt className="text-xs uppercase tracking-wide" style={{ color: p.muted }}>
                 Password last changed
@@ -279,20 +292,12 @@ export default function Screen() {
                 {lastChanged}
               </dd>
             </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide" style={{ color: p.muted }}>
-                Session
-              </dt>
-              <dd className="mt-1 text-sm" style={{ color: p.text }}>
-                Expires 21 Oct 2026
-              </dd>
-            </div>
           </dl>
 
           <div className="mt-6">
             <button
               type="button"
-              onClick={() => navigate("sign-in")}
+              onClick={() => logout()}
               className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B9CF8]"
               style={{
                 backgroundColor: "transparent",
@@ -308,7 +313,11 @@ export default function Screen() {
         </section>
 
         {/* Change password */}
-        <section aria-labelledby="password-heading" className="mb-8 p-6 sm:p-7" style={sectionStyle}>
+        <section
+          aria-labelledby="password-heading"
+          className="mb-8 p-6 sm:p-7"
+          style={sectionStyle}
+        >
           <h2
             id="password-heading"
             className="text-xl font-semibold"
@@ -317,8 +326,8 @@ export default function Screen() {
             Change password
           </h2>
           <p className="mt-2 max-w-xl text-sm leading-relaxed" style={{ color: p.muted }}>
-            Passwords are stored only as a one-way hash. This instance sends no email, so if you forget
-            your password an operator must reset it for you.
+            Passwords are stored only as a one-way hash. This instance sends no email, so if you
+            forget your password an operator must reset it for you.
           </p>
 
           <div aria-live="polite" role="status">
@@ -332,7 +341,11 @@ export default function Screen() {
                   borderRadius: brand.radius,
                 }}
               >
-                <Icons.CheckCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#5B9CF8" }} aria-hidden="true" />
+                <Icons.CheckCircle
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  style={{ color: "#5B9CF8" }}
+                  aria-hidden="true"
+                />
                 <span>{confirmation}</span>
               </p>
             ) : null}
@@ -340,7 +353,11 @@ export default function Screen() {
 
           <form className="mt-6 space-y-6" onSubmit={handleSubmit} noValidate>
             <div>
-              <Label htmlFor="current-password" className="mb-2 block text-sm font-medium" style={{ color: p.text }}>
+              <Label
+                htmlFor="current-password"
+                className="mb-2 block text-sm font-medium"
+                style={{ color: p.text }}
+              >
                 Current password
               </Label>
               <Input
@@ -358,7 +375,11 @@ export default function Screen() {
             </div>
 
             <div>
-              <Label htmlFor="new-password" className="mb-2 block text-sm font-medium" style={{ color: p.text }}>
+              <Label
+                htmlFor="new-password"
+                className="mb-2 block text-sm font-medium"
+                style={{ color: p.text }}
+              >
                 New password
               </Label>
               <Input
@@ -369,7 +390,9 @@ export default function Screen() {
                 value={next}
                 onChange={(e) => setNext(e.target.value)}
                 aria-invalid={errors.next ? "true" : undefined}
-                aria-describedby={errors.next ? "new-password-error password-rules" : "password-rules"}
+                aria-describedby={
+                  errors.next ? "new-password-error password-rules" : "password-rules"
+                }
                 style={fieldStyle}
               />
               <FieldError id="new-password-error" message={errors.next} />
@@ -381,7 +404,11 @@ export default function Screen() {
             </div>
 
             <div>
-              <Label htmlFor="confirm-password" className="mb-2 block text-sm font-medium" style={{ color: p.text }}>
+              <Label
+                htmlFor="confirm-password"
+                className="mb-2 block text-sm font-medium"
+                style={{ color: p.text }}
+              >
                 Confirm new password
               </Label>
               <Input
@@ -413,7 +440,8 @@ export default function Screen() {
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <button
                 type="submit"
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#5B9CF8]"
+                disabled={submitting}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#5B9CF8] disabled:opacity-60"
                 style={{
                   backgroundColor: brand.primaryColor,
                   color: "#0B1016",
@@ -421,7 +449,7 @@ export default function Screen() {
                 }}
               >
                 <Icons.Check className="h-4 w-4" aria-hidden="true" />
-                Update password
+                {submitting ? "Updating…" : "Update password"}
               </button>
               <button
                 type="button"
@@ -442,7 +470,11 @@ export default function Screen() {
         </section>
 
         {/* Appearance */}
-        <section aria-labelledby="appearance-heading" className="mb-8 p-6 sm:p-7" style={sectionStyle}>
+        <section
+          aria-labelledby="appearance-heading"
+          className="mb-8 p-6 sm:p-7"
+          style={sectionStyle}
+        >
           <h2
             id="appearance-heading"
             className="text-xl font-semibold"
@@ -486,7 +518,10 @@ export default function Screen() {
                       <span className="block text-sm font-medium" style={{ color: p.text }}>
                         {option.label}
                       </span>
-                      <span className="mt-0.5 block text-xs leading-snug" style={{ color: p.muted }}>
+                      <span
+                        className="mt-0.5 block text-xs leading-snug"
+                        style={{ color: p.muted }}
+                      >
                         {option.hint}
                       </span>
                     </span>
@@ -505,14 +540,21 @@ export default function Screen() {
 
           <div
             className="mt-6 p-5"
-            style={{ backgroundColor: p.bg, border: "1px solid " + p.border, borderRadius: brand.radius }}
+            style={{
+              backgroundColor: p.bg,
+              border: "1px solid " + p.border,
+              borderRadius: brand.radius,
+            }}
           >
-            <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: p.muted }}>
+            <h3
+              className="text-xs font-semibold uppercase tracking-wide"
+              style={{ color: p.muted }}
+            >
               Preview
             </h3>
             <p className="mt-3 text-sm leading-relaxed" style={{ color: p.text }}>
-              The travel policy allows economy fares booked at least 14 days ahead; anything later needs
-              your manager's approval in writing.
+              The travel policy allows economy fares booked at least 14 days ahead; anything later
+              needs your manager's approval in writing.
             </p>
             <p className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-xs" style={{ color: p.muted }}>
@@ -540,119 +582,6 @@ export default function Screen() {
               </span>
             </p>
           </div>
-        </section>
-
-        {/* Recent activity */}
-        <section aria-labelledby="activity-heading" className="p-6 sm:p-7" style={sectionStyle}>
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2
-                id="activity-heading"
-                className="text-xl font-semibold"
-                style={{ fontFamily: brand.fontHeading, color: p.text }}
-              >
-                Recent sign-in activity
-              </h2>
-              <p className="mt-2 text-sm" style={{ color: p.muted }}>
-                Five failed attempts within 15 minutes lock this email for 15 minutes.
-              </p>
-            </div>
-            <div className="min-w-[12rem]">
-              <Label htmlFor="activity-filter" className="mb-2 block text-sm font-medium" style={{ color: p.text }}>
-                Filter by result
-              </Label>
-              <Select
-                id="activity-filter"
-                value={activityFilter}
-                onChange={(e) => setActivityFilter(e.target.value)}
-                style={fieldStyle}
-              >
-                <option value="all">All events</option>
-                <option value="success">Signed in</option>
-                <option value="failed">Failed attempts</option>
-                <option value="locked">Lockouts</option>
-                <option value="changed">Password changes</option>
-              </Select>
-            </div>
-          </div>
-
-          <p className="mt-4 text-sm" aria-live="polite" style={{ color: p.muted }}>
-            Showing {visibleActivity.length} of {activity.length} events
-          </p>
-
-          {visibleActivity.length === 0 ? (
-            <div
-              className="mt-4 px-5 py-10 text-center"
-              style={{ border: "1px dashed " + p.border, borderRadius: brand.radius }}
-            >
-              <p className="text-sm font-medium" style={{ color: p.text }}>
-                No events of this kind
-              </p>
-              <p className="mt-1 text-sm" style={{ color: p.muted }}>
-                Nothing in the last 30 days matches this filter.
-              </p>
-              <button
-                type="button"
-                onClick={() => setActivityFilter("all")}
-                className="mt-4 px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B9CF8]"
-                style={{ border: "1px solid " + p.border, color: p.text, borderRadius: brand.radius }}
-              >
-                Clear filter
-              </button>
-            </div>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <Table className="w-full text-left text-sm">
-                <THead>
-                  <TR style={{ borderBottom: "1px solid " + p.border }}>
-                    <TH scope="col" className="py-3 pr-4 text-xs font-semibold uppercase tracking-wide" style={{ color: p.muted }}>
-                      When
-                    </TH>
-                    <TH scope="col" className="py-3 pr-4 text-xs font-semibold uppercase tracking-wide" style={{ color: p.muted }}>
-                      Result
-                    </TH>
-                    <TH scope="col" className="py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: p.muted }}>
-                      Device and address
-                    </TH>
-                  </TR>
-                </THead>
-                <TBody>
-                  {visibleActivity.map((row) => {
-                    const meta = STATUS_META[row.status];
-                    return (
-                      <TR key={row.id} style={{ borderBottom: "1px solid " + p.border }}>
-                        <TD className="py-3 pr-4 whitespace-nowrap" style={{ color: p.text }}>
-                          {row.when}
-                        </TD>
-                        <TD className="py-3 pr-4">
-                          <span
-                            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap"
-                            style={{
-                              backgroundColor: p.surfaceAlt,
-                              color: resolved === "light" && row.status === "failed" ? "#8A5213" : meta.tint,
-                              border: "1px solid " + p.border,
-                            }}
-                          >
-                            {row.status === "success" || row.status === "changed" ? (
-                              <Icons.CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                            ) : row.status === "failed" ? (
-                              <Icons.AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                            ) : (
-                              <Icons.X className="h-3.5 w-3.5" aria-hidden="true" />
-                            )}
-                            {meta.label}
-                          </span>
-                        </TD>
-                        <TD className="py-3" style={{ color: p.muted }}>
-                          {row.device}
-                        </TD>
-                      </TR>
-                    );
-                  })}
-                </TBody>
-              </Table>
-            </div>
-          )}
         </section>
       </div>
     </div>

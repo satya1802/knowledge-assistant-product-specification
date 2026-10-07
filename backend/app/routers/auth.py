@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models import User
 from app.schemas import (
     ChangePasswordRequest,
+    ChangePasswordResponse,
     LoginRequest,
     MeResponse,
     RegisterRequest,
@@ -147,11 +148,36 @@ async def me(
     )
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/change-password", response_model=ChangePasswordResponse)
 async def change_password(
     payload: ChangePasswordRequest,
-    _user: CurrentUserDep,
-) -> None:
-    # Change-password ships in KNOW1307CB-12-1; this endpoint only enforces
-    # that a caller is signed in until that ticket implements the behaviour.
-    return None
+    db: DbSessionDep,
+    settings: SettingsDep,
+    user: CurrentUserDep,
+) -> ChangePasswordResponse:
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"field": "current_password", "detail": "Current password is incorrect."},
+        )
+
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"field": "confirm_password", "detail": "Passwords do not match."},
+        )
+
+    if len(payload.new_password) < settings.min_password_length:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "field": "new_password",
+                "detail": f"Password must be at least {settings.min_password_length} characters.",
+            },
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    db.add(user)
+    db.commit()
+
+    return ChangePasswordResponse(detail="Password changed successfully.")

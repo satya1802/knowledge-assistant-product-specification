@@ -56,6 +56,10 @@ class MeResponse(BaseModel):
     self_registration_enabled: bool
 
 
+class ChangePasswordResponse(BaseModel):
+    detail: str
+
+
 # --- chat_svc ------------------------------------------------------------
 
 
