@@ -42,6 +42,20 @@ class ChangePasswordRequest(BaseModel):
     confirm_password: str = Field(min_length=1)
 
 
+class UserOut(BaseModel):
+    id: str
+    name: str
+    email: str
+    is_admin: bool
+
+    model_config = {"from_attributes": True}
+
+
+class MeResponse(BaseModel):
+    user: UserOut | None
+    self_registration_enabled: bool
+
+
 # --- chat_svc ------------------------------------------------------------
 
 

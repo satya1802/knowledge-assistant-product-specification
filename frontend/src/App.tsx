@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
 import SignIn from "@/screens/SignIn";
@@ -6,6 +7,7 @@ import KnowledgeBase from "@/screens/KnowledgeBase";
 import Account from "@/screens/Account";
 import GettingStarted from "@/screens/GettingStarted";
 import ApiReference from "@/screens/ApiReference";
+import { AuthProvider, useAuth } from "@/lib/auth";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   [
@@ -13,7 +15,18 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-[var(--brand-hover)] text-[var(--brand-fg)]" : "text-[var(--brand-fg-muted)]",
   ].join(" ");
 
-export default function App() {
+/** /chat, /knowledge-base and /account require a session; everything else
+ * (including /sign-in, /getting-started and /api-reference) stays public. */
+function RequireAuth({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/sign-in" replace />;
+  return children;
+}
+
+function AppShell() {
+  const { user } = useAuth();
+
   return (
     <div className="flex min-h-screen">
       <aside
@@ -27,7 +40,7 @@ export default function App() {
           className="mb-4 px-3 text-sm font-semibold"
           style={{ fontFamily: "var(--brand-font-heading)" }}
         >
-          {"Knowledge Assistant \u00b7 Product specification"}
+          {"Knowledge Assistant · Product specification"}
         </p>
         <nav className="flex flex-col gap-1">
           <NavLink to="/sign-in" className={navLinkClass}>
@@ -52,15 +65,47 @@ export default function App() {
       </aside>
       <main className="flex-1 overflow-auto">
         <Routes>
-          <Route path="/sign-in" element={<SignIn />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/knowledge-base" element={<KnowledgeBase />} />
-          <Route path="/account" element={<Account />} />
+          <Route
+            path="/sign-in"
+            element={user ? <Navigate to="/chat" replace /> : <SignIn />}
+          />
+          <Route
+            path="/chat"
+            element={
+              <RequireAuth>
+                <Chat />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/knowledge-base"
+            element={
+              <RequireAuth>
+                <KnowledgeBase />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/account"
+            element={
+              <RequireAuth>
+                <Account />
+              </RequireAuth>
+            }
+          />
           <Route path="/getting-started" element={<GettingStarted />} />
           <Route path="/api-reference" element={<ApiReference />} />
           <Route path="*" element={<Navigate to="/sign-in" replace />} />
         </Routes>
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   );
 }

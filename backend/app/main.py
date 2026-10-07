@@ -8,13 +8,15 @@ OpenAPI document and passes its tests before a single handler is implemented.
 
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401 -- imported so the tables register before create_all
-from app.database import Base, engine
+from app.config import get_settings
+from app.database import Base, SessionLocal, engine
 from app.logging_filter import install_redacting_filter
 from app.routers import auth, chat, conversations, docs, documents
+from app.services.auth import bootstrap_admin, require_session
 
 # Installed before anything else logs, so no log line -- from this module,
 # uvicorn's own access/error logs, or any handler -- can ever contain the
@@ -93,11 +95,33 @@ app.add_middleware(
 # startup. Replace this with Alembic before anything holds data worth keeping.
 Base.metadata.create_all(bind=engine)
 
+# AC-003: if ADMIN_EMAIL/ADMIN_PASSWORD are set in backend/.env, that admin
+# account is created once at startup (idempotent across restarts).
+_bootstrap_db = SessionLocal()
+try:
+    bootstrap_admin(_bootstrap_db, get_settings())
+finally:
+    _bootstrap_db.close()
+
 app.include_router(auth.router)
-app.include_router(documents.router)
-app.include_router(chat.router)
-app.include_router(conversations.router)
+# AC-009: every endpoint other than register, login, /auth/me and the public
+# docs requires a valid session; wired here rather than inside each router so
+# documents_svc/chat_svc/conv_svc's own handlers stay untouched.
+app.include_router(documents.router, dependencies=[Depends(require_session)])
+app.include_router(chat.router, dependencies=[Depends(require_session)])
+app.include_router(conversations.router, dependencies=[Depends(require_session)])
 app.include_router(docs.router)
+
+
+@app.middleware("http")
+async def no_store_for_api(request: Request, call_next):
+    """AC-008: authenticated responses carry no-store cache headers so a
+    back-button replay after logout cannot reveal previously-rendered data."""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.get("/health")
