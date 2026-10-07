@@ -15,9 +15,57 @@ from app import models  # noqa: F401 -- imported so the tables register before c
 from app.database import Base, engine
 from app.routers import auth, chat, conversations, docs, documents
 
+_DESCRIPTION = """\
+Knowledge Assistant · Product specification
+
+Build an enterprise RAG chatbot called "Knowledge Assistant" that answers
+employees' questions from a shared, company-wide knowledge base.
+
+Sign-in (email and password, no SSO)
+- Users sign in with email and password, can create an account (admins can
+  turn this off), log out and change their password.
+- Passwords are stored securely hashed. Sessions use a secure, HTTP-only
+  cookie.
+- After 5 failed sign-ins in 15 minutes, that email is locked out for 15
+  minutes. A wrong email and a wrong password show the same error.
+- Accounts:
+  - The first account (or an admin email and password set in a .env file)
+    becomes the administrator.
+  - There's no email service, so admins reset forgotten passwords.
+  - Disabling an account logs that user out immediately.
+- Users page (admins only): list, search, add a user, make or remove admin,
+  disable or enable, reset password. Admins can't disable or demote
+  themselves.
+
+AI provider
+- The bot runs on a Google Gemini API key, set in a gitignored backend/.env
+  and never shown or logged.
+- It uses a fast Gemini Flash-Lite model for answers, Gemini embeddings for
+  search, and a Gemini image model for image generation. All are
+  configurable.
+- It must stay fast (first words in about 2 seconds) and never time out
+  while Gemini is busy:
+  - send keep-alive pings during slow responses;
+  - retry automatically when Gemini is overloaded or rate-limited;
+  - use minimal model "thinking".
+- An offline fallback mode works without any key, for local testing.
+
+Knowledge base
+- Users upload PDF, DOCX, TXT and Markdown files, which are processed and
+  searchable within seconds.
+- The page shows stats (total, ready, processing, failed), an upload
+  dropzone, and a document table with status, search, filter, download and
+  delete.
+- Uploads are shared with everyone.
+
+Answers
+- Every answer is searched from the documents first, streams in live and
+  cites its sources. Clicking a numbered source chip opens a side panel.
+"""
+
 app = FastAPI(
-    title="Knowledge Assistant \u00b7 Product specification",
-    description="Knowledge Assistant \u00b7 Product specification Page 1 Knowledge Assistant Build an enterprise RAG chatbot called \"Knowledge Assistant\" that answers employees' questions from a shared, company-wide knowledge base. Sign-in (email and password, no SSO) \u007f Users sign in with email and password, can create an account (admins can turn this off), log out and change their password. \u007f Passwords are stored securely hashed. Sessions use a secure, HTTP-only cookie. \u007f After 5 failed sign-ins in 15 minutes, that email is locked out for 15 minutes. A wrong email and a wrong password show the same error. \u007f Accounts: \u2013 The first account (or an admin email and password set in a .env file) becomes the administrator. \u2013 There's no email service, so admins reset forgotten passwords. \u2013 Disabling an account logs that user out immediately. \u007f Users page (admins only): list, search, add a user, make or remove admin, disable or enable, reset password. Admins can't disable or demote themselves. AI provider \u007f The bot runs on a Google Gemini API key, set in a gitignored backend/.env and never shown or logged. \u007f It uses a fast Gemini Flash-Lite model for answers, Gemini embeddings for search, and a Gemini image model for image generation. All are configurable. \u007f It must stay fast (first words in about 2 seconds) and never time out while Gemini is busy: \u2013 send keep-alive pings during slow responses; \u2013 retry automatically when Gemini is overloaded or rate-limited; \u2013 use minimal model \"thinking\". \u007f An offline fallback mode works without any key, for local testing. Knowledge base \u007f Users upload PDF, DOCX, TXT and Markdown files, which are processed and searchable within seconds. \u007f The page shows stats (total, ready, processing, failed), an upload dropzone, and a document table with status, search, filter, download and delete. \u007f Uploads are shared with everyone. Answers \u007f Every answer is searched from the documents first, streams in live and cites its sources. Clicking a numbered source chip opens a side",
+    title="Knowledge Assistant · Product specification",
+    description=_DESCRIPTION,
     version="0.1.0",
 )
 
