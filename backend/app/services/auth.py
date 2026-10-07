@@ -9,6 +9,7 @@ hardcodes a literal that the architecture says belongs in config.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
 import bcrypt
 from fastapi import Depends, HTTPException, Request, status
@@ -17,7 +18,8 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.config import Settings, get_settings
 from app.database import get_db
-from app.models import LoginAttempt, Session as SessionModel, User
+from app.models import LoginAttempt, User
+from app.models import Session as SessionModel
 
 GENERIC_LOGIN_ERROR = "Invalid email or password."
 GENERIC_REGISTER_ERROR = "Those details cannot be used."
@@ -139,7 +141,7 @@ def get_current_user(request: Request, db: DbSession) -> User | None:
 
 def require_session(
     request: Request,
-    db: DbSession = Depends(get_db),
+    db: Annotated[DbSession, Depends(get_db)],
 ) -> User:
     """FastAPI dependency: 401s any request without a valid, live session.
 
@@ -149,7 +151,9 @@ def require_session(
     """
     user = get_current_user(request, db)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=NOT_AUTHENTICATED_ERROR)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=NOT_AUTHENTICATED_ERROR
+        )
     return user
 
 

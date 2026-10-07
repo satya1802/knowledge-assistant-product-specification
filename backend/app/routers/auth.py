@@ -3,6 +3,8 @@
 Registration, login, logout, session bootstrap and self password change.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session as DbSession
 
@@ -20,6 +22,7 @@ from app.services.auth import (
     GENERIC_LOGIN_ERROR,
     GENERIC_REGISTER_ERROR,
     REGISTRATION_DISABLED_ERROR,
+    clear_session_cookie,
     create_session,
     get_current_user,
     hash_password,
@@ -30,11 +33,14 @@ from app.services.auth import (
     reset_login_attempts,
     revoke_session,
     set_session_cookie,
-    clear_session_cookie,
     verify_password,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+DbSessionDep = Annotated[DbSession, Depends(get_db)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
+CurrentUserDep = Annotated[User, Depends(require_session)]
 
 
 def _user_out(user: User) -> UserOut:
@@ -45,8 +51,8 @@ def _user_out(user: User) -> UserOut:
 async def register(
     payload: RegisterRequest,
     response: Response,
-    db: DbSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    db: DbSessionDep,
+    settings: SettingsDep,
 ) -> UserOut:
     if not settings.self_registration_enabled:
         raise HTTPException(
@@ -86,8 +92,8 @@ async def register(
 async def login(
     payload: LoginRequest,
     response: Response,
-    db: DbSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    db: DbSessionDep,
+    settings: SettingsDep,
 ) -> UserOut:
     email = normalize_email(payload.email)
 
@@ -96,8 +102,10 @@ async def login(
 
     user = db.query(User).filter(User.email == email).first()
 
-    if user is None or not user.is_enabled or not verify_password(
-        payload.password, user.password_hash
+    if (
+        user is None
+        or not user.is_enabled
+        or not verify_password(payload.password, user.password_hash)
     ):
         record_login_attempt(db, email, succeeded=False)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=GENERIC_LOGIN_ERROR)
@@ -115,9 +123,9 @@ async def login(
 async def logout(
     request: Request,
     response: Response,
-    db: DbSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-    _user: User = Depends(require_session),
+    db: DbSessionDep,
+    settings: SettingsDep,
+    _user: CurrentUserDep,
 ) -> None:
     session_id = request.cookies.get(settings.session_cookie_name)
     if session_id:
@@ -129,8 +137,8 @@ async def logout(
 @router.get("/me", response_model=MeResponse)
 async def me(
     request: Request,
-    db: DbSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    db: DbSessionDep,
+    settings: SettingsDep,
 ) -> MeResponse:
     user = get_current_user(request, db)
     return MeResponse(
@@ -141,7 +149,8 @@ async def me(
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(
-    payload: ChangePasswordRequest, _user: User = Depends(require_session)
+    payload: ChangePasswordRequest,
+    _user: CurrentUserDep,
 ) -> None:
     # Change-password ships in KNOW1307CB-12-1; this endpoint only enforces
     # that a caller is signed in until that ticket implements the behaviour.
