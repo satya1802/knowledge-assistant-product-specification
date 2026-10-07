@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401 -- imported so the tables register before create_all
 from app.database import Base, engine
+from app.routers import auth, chat, conversations, docs, documents
 
 app = FastAPI(
     title="Knowledge Assistant \u00b7 Product specification",
@@ -37,6 +38,12 @@ app.add_middleware(
 # The scaffold ships no migrations, so the tables are created from the models on
 # startup. Replace this with Alembic before anything holds data worth keeping.
 Base.metadata.create_all(bind=engine)
+
+app.include_router(auth.router)
+app.include_router(documents.router)
+app.include_router(chat.router)
+app.include_router(conversations.router)
+app.include_router(docs.router)
 
 
 @app.get("/health")
