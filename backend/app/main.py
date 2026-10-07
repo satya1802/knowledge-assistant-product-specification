@@ -13,7 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401 -- imported so the tables register before create_all
 from app.database import Base, engine
+from app.logging_filter import install_redacting_filter
 from app.routers import auth, chat, conversations, docs, documents
+
+# Installed before anything else logs, so no log line -- from this module,
+# uvicorn's own access/error logs, or any handler -- can ever contain the
+# Gemini API key or the admin password configured in backend/.env.
+install_redacting_filter()
 
 _DESCRIPTION = """\
 Knowledge Assistant · Product specification

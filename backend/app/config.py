@@ -37,11 +37,11 @@ class Settings(BaseSettings):
     self_registration_enabled: bool = Field(default=True)
     admin_email: str | None = Field(default=None)
     admin_password: str | None = Field(default=None, repr=False)
+    min_password_length: int = Field(default=12)
     session_cookie_name: str = Field(default="ka_session")
     session_ttl_days: int = Field(default=30)
-    login_lockout_attempts: int = Field(default=5)
-    login_lockout_window_minutes: int = Field(default=15)
-    login_lockout_duration_minutes: int = Field(default=15)
+    lockout_threshold: int = Field(default=5)
+    lockout_window_minutes: int = Field(default=15)
 
     # --- Knowledge base (doc_svc / ingest_svc) --------------------------
     max_upload_mb: int = Field(default=25)
