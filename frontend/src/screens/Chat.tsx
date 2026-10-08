@@ -226,7 +226,11 @@ export default function Screen() {
     setConversations((prev) =>
       prev.map((c) =>
         c.id === convId
-          ? { ...c, updated_at: nowIso(), messages: c.messages.map((m) => (m.id === msgId ? updater(m) : m)) }
+          ? {
+              ...c,
+              updated_at: nowIso(),
+              messages: c.messages.map((m) => (m.id === msgId ? updater(m) : m)),
+            }
           : c,
       ),
     );
@@ -250,7 +254,8 @@ export default function Screen() {
     streamChat(
       { conversation_id: conversationIdForRequest, question },
       {
-        onToken: (text) => updateMessage(convId, msgId, (m) => ({ ...m, content: m.content + text })),
+        onToken: (text) =>
+          updateMessage(convId, msgId, (m) => ({ ...m, content: m.content + text })),
         onCitations: (citations) => updateMessage(convId, msgId, (m) => ({ ...m, citations })),
         onDone: (data: ChatDoneData) => {
           const resolvedConvId = data.conversation_id || convId;
@@ -301,7 +306,12 @@ export default function Screen() {
     const text = (raw || "").trim();
     if (!text || activeStreamRef.current) return;
     stopSpeech();
-    const userMsg: ChatMessage = { id: nextId("m"), role: "user", content: text, created_at: nowIso() };
+    const userMsg: ChatMessage = {
+      id: nextId("m"),
+      role: "user",
+      content: text,
+      created_at: nowIso(),
+    };
     const asstId = nextId("m");
     const asstMsg: ChatMessage = {
       id: asstId,
@@ -408,7 +418,12 @@ export default function Screen() {
         setConversations((prev) =>
           prev.map((c) =>
             c.id === id
-              ? { ...c, title: conv.title, updated_at: conv.updated_at, messages: conv.messages as ChatMessage[] }
+              ? {
+                  ...c,
+                  title: conv.title,
+                  updated_at: conv.updated_at,
+                  messages: conv.messages as ChatMessage[],
+                }
               : c,
           ),
         );
@@ -623,9 +638,7 @@ export default function Screen() {
                       })}
                     >
                       <span className="font-semibold">{c.chip_number}</span>
-                      <span className="truncate">
-                        {c.document_filename || "Source document"}
-                      </span>
+                      <span className="truncate">{c.document_filename || "Source document"}</span>
                     </button>
                   </li>
                 ))}
@@ -832,8 +845,7 @@ export default function Screen() {
             <div className="h-px mb-3" style={{ backgroundColor: t.border }} />
             {conversations.length === 0 ? (
               <p className="text-xs leading-5 px-1 py-2" style={{ color: t.subtext }}>
-                No saved chats yet. Your conversations appear here once you ask your first
-                question.
+                No saved chats yet. Your conversations appear here once you ask your first question.
               </p>
             ) : grouped.length === 0 ? (
               <div className="px-1 py-2">
@@ -1279,8 +1291,8 @@ export default function Screen() {
                     style={{ color: t.accentText }}
                   />
                   <span>
-                    This document's details are no longer available. It may have been deleted
-                    from the shared knowledge base after this answer was generated.
+                    This document's details are no longer available. It may have been deleted from
+                    the shared knowledge base after this answer was generated.
                   </span>
                 </p>
               </div>
@@ -1379,9 +1391,8 @@ export default function Screen() {
               Delete this conversation?
             </h2>
             <p id="del-desc" className="mt-2 text-sm leading-6" style={{ color: t.subtext }}>
-              “{(conversations.find((c) => c.id === pendingDelete) || { title: "" }).title}” and
-              all of its messages will be permanently removed from your history. This cannot be
-              undone.
+              “{(conversations.find((c) => c.id === pendingDelete) || { title: "" }).title}” and all
+              of its messages will be permanently removed from your history. This cannot be undone.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <button

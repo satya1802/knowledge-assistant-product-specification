@@ -176,7 +176,9 @@ describe("Chat", () => {
       expect(screen.getByText("Persisted final answer from the server.")).toBeInTheDocument(),
     );
     expect(
-      fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/conversations/c-server-2")),
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes("/api/conversations/c-server-2"),
+      ),
     ).toBe(true);
   });
 

@@ -90,9 +90,7 @@ def _build_prompt(question: str, chunks: list[DocumentChunk]) -> str:
     )
 
 
-def _produce_tokens(
-    client: GeminiClient, prompt: str, q: "queue.Queue[Any]", done: object
-) -> None:
+def _produce_tokens(client: GeminiClient, prompt: str, q: queue.Queue[Any], done: object) -> None:
     """Runs on a worker thread: the SDK call is synchronous, so this keeps
     the blocking generate/retry loop off the event loop while the async
     side polls `q` and can interleave keep-alive comments."""
@@ -215,11 +213,15 @@ async def ask(
     content = payload.content.strip() if payload.content else ""
     if not content:
         # AC-042: rejected before any model call and before any DB write.
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_EMPTY_CONTENT_ERROR)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_EMPTY_CONTENT_ERROR
+        )
 
     conversation = _get_or_create_conversation(db, user, payload.conversation_id, content)
     if conversation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_CONVERSATION_NOT_FOUND_ERROR)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_CONVERSATION_NOT_FOUND_ERROR
+        )
 
     user_message = Message(conversation_id=conversation.id, role="user", content=content)
     db.add(user_message)

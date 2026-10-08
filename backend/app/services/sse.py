@@ -32,7 +32,7 @@ def format_event(event: str, data: dict[str, Any]) -> str:
 
 
 async def drain_with_keepalive(
-    q: "queue.Queue[Any]",
+    q: queue.Queue[Any],
     done: object,
     keepalive_seconds: float = _KEEPALIVE_SECONDS,
 ) -> AsyncIterator[Any]:

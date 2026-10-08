@@ -54,8 +54,7 @@ def retrieve_chunks(
     )
 
     scored = [
-        (_cosine_similarity(query_embedding, list(chunk.embedding or [])), chunk)
-        for chunk in rows
+        (_cosine_similarity(query_embedding, list(chunk.embedding or [])), chunk) for chunk in rows
     ]
     scored = [(score, chunk) for score, chunk in scored if score >= settings.relevance_threshold]
     scored.sort(key=lambda pair: pair[0], reverse=True)
