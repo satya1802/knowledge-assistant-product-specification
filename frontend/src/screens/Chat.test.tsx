@@ -281,7 +281,9 @@ describe("Chat", () => {
         controller.enqueue(encoder.encode(frame("token", { text: "Partial…" })));
         await blocked;
         controller.enqueue(
-          encoder.encode(frame("done", { conversation_id: "c-stop-1", is_general_knowledge: false })),
+          encoder.encode(
+            frame("done", { conversation_id: "c-stop-1", is_general_knowledge: false }),
+          ),
         );
         controller.close();
       },
