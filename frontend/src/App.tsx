@@ -8,6 +8,7 @@ import Account from "@/screens/Account";
 import GettingStarted from "@/screens/GettingStarted";
 import ApiReference from "@/screens/ApiReference";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { ThemeProvider } from "@/lib/theme";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   [
@@ -101,8 +102,10 @@ function AppShell() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppShell />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

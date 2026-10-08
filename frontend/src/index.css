@@ -1,18 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  --brand-primary: #5B9CF8;
-  --brand-accent: #F4A259;
-  --brand-neutral: #8A95A1;
+  --brand-primary: #5b9cf8;
+  --brand-accent: #f4a259;
+  --brand-neutral: #8a95a1;
   --brand-radius: 0.5rem;
   --brand-font-heading: Inter, system-ui, sans-serif;
   --brand-font-body: Inter, system-ui, sans-serif;
-  --brand-surface: rgba(255,255,255,0.04);
-  --brand-border: rgba(255,255,255,0.10);
+  --brand-surface: rgba(255, 255, 255, 0.04);
+  --brand-border: rgba(255, 255, 255, 0.1);
   --brand-fg: #e2e8f0;
-  --brand-fg-muted: rgba(226,232,240,0.65);
-  --brand-hover: rgba(255,255,255,0.06);
+  --brand-fg-muted: rgba(226, 232, 240, 0.65);
+  --brand-hover: rgba(255, 255, 255, 0.06);
   --brand-background: #101418;
+}
+
+/* Resolved by src/lib/theme.tsx (and mirrored pre-mount by the inline
+   script in index.html) onto <html data-theme>. The default :root above is
+   the dark palette; light overrides it with white plus a soft blue-grey. */
+:root[data-theme="light"] {
+  --brand-surface: rgba(16, 20, 24, 0.04);
+  --brand-border: rgba(16, 20, 24, 0.1);
+  --brand-fg: #121920;
+  --brand-fg-muted: rgba(18, 25, 32, 0.65);
+  --brand-hover: rgba(16, 20, 24, 0.06);
+  --brand-background: #f6f8fc;
 }
 
 body {

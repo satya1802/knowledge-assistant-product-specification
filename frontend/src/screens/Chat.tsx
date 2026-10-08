@@ -4,6 +4,7 @@ import * as UI from "@/lib/ui";
 import { Icons } from "@/lib/icons";
 import { brand } from "@/lib/brand";
 import { useNavigate } from "@/lib/navigate";
+import { useTheme } from "@/lib/theme";
 import {
   ApiError,
   deleteConversation,
@@ -116,8 +117,7 @@ export default function Screen() {
     Clock,
   } = Icons;
 
-  const [theme, setTheme] = React.useState("dark");
-  const resolvedTheme = theme === "light" ? "light" : "dark";
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const t = PALETTES[resolvedTheme];
 
   const [conversations, setConversations] = React.useState<Conversation[]>([]);
@@ -1133,8 +1133,8 @@ export default function Screen() {
                   Theme
                 </legend>
                 <div className="flex gap-1">
-                  {["Light", "Dark", "System"].map((label) => {
-                    const value = label.toLowerCase();
+                  {(["Light", "Dark", "System"] as const).map((label) => {
+                    const value = label.toLowerCase() as "light" | "dark" | "system";
                     const on = theme === value;
                     return (
                       <button

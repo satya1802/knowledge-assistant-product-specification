@@ -9,6 +9,7 @@ import { brand } from "@/lib/brand";
 import { useNavigate } from "@/lib/navigate";
 import { useAuth } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 
 const { Input, Label, Checkbox } = UI;
 const { Check, X, ArrowLeft, AlertCircle, CheckCircle } = Icons;
@@ -45,10 +46,8 @@ const MIN_LENGTH = 12;
 export default function Screen() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [theme, setTheme] = React.useState("dark");
+  const { theme, setTheme, resolvedTheme: resolved } = useTheme();
   const [themeNotice, setThemeNotice] = React.useState("");
-  const systemAppearance = "dark";
-  const resolved = theme === "system" ? systemAppearance : theme;
   const p = resolved === "light" ? LIGHT : DARK;
 
   const [current, setCurrent] = React.useState("");
@@ -73,9 +72,15 @@ export default function Screen() {
   function handleTheme(value) {
     setTheme(value);
     const chosen = THEME_OPTIONS.find((o) => o.value === value);
+    const systemIsDark =
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
     setThemeNotice(
       value === "system"
-        ? "Theme set to System — currently showing Dark. Remembered on this browser."
+        ? "Theme set to System — currently showing " +
+            (systemIsDark ? "Dark" : "Light") +
+            ". Remembered on this browser."
         : "Theme set to " + chosen.label + ". Remembered on this browser.",
     );
   }

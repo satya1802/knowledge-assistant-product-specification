@@ -7,6 +7,7 @@ import { brand } from "@/lib/brand";
 import { useNavigate } from "@/lib/navigate";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 
 const MIN_PW = 12;
 
@@ -52,17 +53,10 @@ const HIGHLIGHTS = [
   "Conversations are saved privately to your account and grouped by date.",
 ];
 
-const THEME_OPTIONS = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-];
-
 export default function Screen() {
   const navigate = useNavigate();
   const { selfRegistrationEnabled, login, register } = useAuth();
-  const [themeChoice, setThemeChoice] = React.useState("dark");
-  const [systemDark, setSystemDark] = React.useState(true);
+  const { resolvedTheme, setTheme } = useTheme();
   const [mode, setMode] = React.useState("signin");
 
   const [signinEmail, setSigninEmail] = React.useState("");
@@ -85,25 +79,12 @@ export default function Screen() {
   const registerTabRef = React.useRef(null);
 
   React.useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return undefined;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    setSystemDark(mq.matches);
-    const handler = (event) => setSystemDark(event.matches);
-    if (mq.addEventListener) mq.addEventListener("change", handler);
-    else if (mq.addListener) mq.addListener(handler);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", handler);
-      else if (mq.removeListener) mq.removeListener(handler);
-    };
-  }, []);
-
-  React.useEffect(() => {
     if (!selfRegistrationEnabled && mode === "register") {
       setMode("signin");
     }
   }, [selfRegistrationEnabled, mode]);
 
-  const dark = themeChoice === "dark" || (themeChoice === "system" && systemDark);
+  const dark = resolvedTheme === "dark";
   const t = dark ? PALETTES.dark : PALETTES.light;
   const radius = brand.radius || "0.5rem";
 
@@ -261,41 +242,20 @@ export default function Screen() {
           <p className="text-xs uppercase tracking-[0.18em]" style={{ color: t.muted }}>
             Northwind · internal instance
           </p>
-          <div
-            role="group"
-            aria-label="Colour theme"
-            className="flex items-center gap-1 p-1"
+          <button
+            type="button"
+            onClick={() => setTheme(dark ? "light" : "dark")}
+            aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+            className="nd-focus flex h-9 w-9 items-center justify-center text-base"
             style={{
               backgroundColor: t.panel,
               border: `1px solid ${t.border}`,
               borderRadius: radius,
+              color: t.text,
             }}
           >
-            {THEME_OPTIONS.map((opt) => {
-              const active = themeChoice === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setThemeChoice(opt.value)}
-                  className="nd-focus flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors"
-                  style={{
-                    borderRadius: "calc(" + radius + " - 2px)",
-                    backgroundColor: active ? t.panelAlt : "transparent",
-                    color: active ? t.text : t.muted,
-                  }}
-                >
-                  {active ? (
-                    <span aria-hidden="true">
-                      <Icons.Check className="h-3.5 w-3.5" />
-                    </span>
-                  ) : null}
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+            <span aria-hidden="true">{dark ? "☀️" : "🌙"}</span>
+          </button>
         </div>
 
         <div className="mt-10 grid gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">

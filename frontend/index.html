@@ -4,6 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Knowledge Assistant · Product specification</title>
+    <script>
+      // Kills the flash of the wrong theme: reads the same localStorage key
+      // src/lib/theme.tsx writes to and sets data-theme/.dark on <html>
+      // before React mounts (or before any CSS paints), on every route
+      // including /sign-in.
+      (function () {
+        try {
+          var stored = window.localStorage.getItem("ka-theme");
+          var choice = stored === "light" || stored === "dark" ? stored : "system";
+          var resolved =
+            choice === "system"
+              ? window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light"
+              : choice;
+          document.documentElement.setAttribute("data-theme", resolved);
+          if (resolved === "dark") document.documentElement.classList.add("dark");
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
