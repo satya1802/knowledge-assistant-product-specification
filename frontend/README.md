@@ -18,10 +18,9 @@ endpoint is the next job, not something this repository pretends to have done.
 
 ## Running it
 
-```bash
-npm install
-npm run dev
-```
+Use the single start command documented at the root of the repository (`docker compose up
+--build`). It builds this SPA and the backend together and serves this app at the compose
+URL, with no separate frontend setup required.
 
 `npm run build` bundles the app; it does not typecheck. The screens were generated, and a
 generated screen that renders correctly can still not satisfy `tsc` -- usually an untyped
