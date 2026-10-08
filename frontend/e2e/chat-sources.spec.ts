@@ -178,7 +178,9 @@ test.describe("Chat source chips and detail panel", () => {
 
     await page.goto("/chat");
     await ask(page, "What is the remote work policy and incident escalation process?");
-    await expect(page.getByRole("button", { name: /Security-Incident-Runbook\.docx/ })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Security-Incident-Runbook\.docx/ }),
+    ).toBeVisible();
 
     const messageList = page.locator("main div.overflow-y-auto").first();
     await messageList.evaluate((el) => {
