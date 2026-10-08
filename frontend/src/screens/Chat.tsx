@@ -227,10 +227,7 @@ export default function Screen() {
   );
 
   React.useEffect(() => {
-    const id = setTimeout(
-      () => loadHistory(chatQuery),
-      chatQuery.trim().length > 0 ? 300 : 0,
-    );
+    const id = setTimeout(() => loadHistory(chatQuery), chatQuery.trim().length > 0 ? 300 : 0);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatQuery]);
@@ -593,9 +590,7 @@ export default function Screen() {
         setToast("Conversation deleted");
       })
       .catch((err) => {
-        setToast(
-          err instanceof ApiError ? err.message : "Could not delete this conversation.",
-        );
+        setToast(err instanceof ApiError ? err.message : "Could not delete this conversation.");
       });
   };
 
