@@ -49,7 +49,9 @@ def _publish(broker: DocumentEventBroker, document: Document) -> None:
     broker.publish("document.status", _document_event(document))
 
 
-def _mark_failed(db: DbSession, document: Document, reason: str, broker: DocumentEventBroker) -> None:
+def _mark_failed(
+    db: DbSession, document: Document, reason: str, broker: DocumentEventBroker
+) -> None:
     db.rollback()
     # Re-fetch: the failed attempt above may have added chunk rows to the
     # session that rollback() just discarded; querying fresh avoids acting
@@ -109,9 +111,7 @@ def ingest_document(
 
             # Clear any chunks left from a previous failed attempt before
             # writing the fresh set.
-            session.query(DocumentChunk).filter(
-                DocumentChunk.document_id == document.id
-            ).delete()
+            session.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).delete()
 
             for index, chunk in enumerate(chunks):
                 embedding = client.embed(chunk)

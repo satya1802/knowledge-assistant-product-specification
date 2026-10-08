@@ -31,13 +31,13 @@ class DocumentEventBroker:
         self._subscribers: set[queue.Queue[str]] = set()
         self._lock = threading.Lock()
 
-    def subscribe(self) -> "queue.Queue[str]":
+    def subscribe(self) -> queue.Queue[str]:
         q: queue.Queue[str] = queue.Queue()
         with self._lock:
             self._subscribers.add(q)
         return q
 
-    def unsubscribe(self, q: "queue.Queue[str]") -> None:
+    def unsubscribe(self, q: queue.Queue[str]) -> None:
         with self._lock:
             self._subscribers.discard(q)
 

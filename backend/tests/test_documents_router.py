@@ -42,9 +42,7 @@ def _wait_for_terminal_status(client, document_id: str, timeout: float = 5.0) ->
 
 
 def test_upload_a_text_file_reaches_ready_and_is_listed(client) -> None:
-    response = _upload(
-        client, "handbook.txt", b"Employees get unlimited refunds on request. " * 20
-    )
+    response = _upload(client, "handbook.txt", b"Employees get unlimited refunds on request. " * 20)
 
     assert response.status_code == 201
     document_id = response.json()["documents"][0]["id"]
@@ -155,9 +153,7 @@ def test_a_failed_document_does_not_affect_other_documents(client, db_session_fa
     reloaded_good = session.get(Document, uuid.UUID(good_id))
     assert reloaded_good.status == "ready"
     assert (
-        session.query(DocumentChunk)
-        .filter(DocumentChunk.document_id == uuid.UUID(good_id))
-        .count()
+        session.query(DocumentChunk).filter(DocumentChunk.document_id == uuid.UUID(good_id)).count()
         >= 1
     )
 

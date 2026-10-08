@@ -179,9 +179,7 @@ async def download_document(
     try:
         data = store.load(document.storage_key)
     except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from exc
 
     return Response(
         content=data,

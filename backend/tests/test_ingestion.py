@@ -41,9 +41,7 @@ def test_ingest_document_reaches_ready_and_persists_chunks(db_session_factory, t
     assert document.status == "ready"
     assert document.failure_reason is None
 
-    chunks = (
-        session.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).all()
-    )
+    chunks = session.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).all()
     assert len(chunks) >= 1
     for chunk in chunks:
         assert chunk.embedding is not None
@@ -113,9 +111,7 @@ def test_failed_ingestion_leaves_other_documents_and_chunks_untouched(
     session.refresh(good_document)
     assert good_document.status == "ready"
     good_chunk_count = (
-        session.query(DocumentChunk)
-        .filter(DocumentChunk.document_id == good_document.id)
-        .count()
+        session.query(DocumentChunk).filter(DocumentChunk.document_id == good_document.id).count()
     )
     assert good_chunk_count >= 1
 
@@ -130,14 +126,14 @@ def test_failed_ingestion_leaves_other_documents_and_chunks_untouched(
     session.refresh(good_document)
     assert good_document.status == "ready"
     assert (
-        session.query(DocumentChunk)
-        .filter(DocumentChunk.document_id == good_document.id)
-        .count()
+        session.query(DocumentChunk).filter(DocumentChunk.document_id == good_document.id).count()
         == good_chunk_count
     )
 
 
-def test_ingest_document_missing_file_in_store_fails_gracefully(db_session_factory, tmp_path) -> None:
+def test_ingest_document_missing_file_in_store_fails_gracefully(
+    db_session_factory, tmp_path
+) -> None:
     session = db_session_factory()
     store = LocalObjectStore(root=tmp_path / "uploads")
     broker = DocumentEventBroker()
