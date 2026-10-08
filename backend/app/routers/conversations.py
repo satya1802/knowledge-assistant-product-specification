@@ -99,6 +99,13 @@ async def get_conversation(
         # cross-table cascade from Document to MessageCitation), so this is
         # a plain lookup that returns None rather than erroring.
         document = db.get(Document, citation.document_id)
+        # The side panel shows who uploaded a source -- that has to be a
+        # display name, not the raw `uploaded_by` uuid the client has no use
+        # for and was never shown anywhere else in the product.
+        uploader_name = None
+        if document is not None and document.uploaded_by is not None:
+            uploader = db.get(User, document.uploaded_by)
+            uploader_name = uploader.name if uploader is not None else None
         return CitationOut(
             chip_number=citation.chip_number,
             document_id=str(citation.document_id),
@@ -106,9 +113,7 @@ async def get_conversation(
             document_filename=document.filename if document else None,
             document_file_type=document.file_type if document else None,
             document_size_bytes=document.size_bytes if document else None,
-            document_uploaded_by=(
-                str(document.uploaded_by) if document and document.uploaded_by else None
-            ),
+            document_uploaded_by=uploader_name,
             document_uploaded_at=document.uploaded_at.isoformat() if document else None,
         )
 

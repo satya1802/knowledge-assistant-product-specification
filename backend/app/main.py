@@ -6,8 +6,6 @@ is a stub that returns a typed placeholder, so the service starts, serves its
 OpenAPI document and passes its tests before a single handler is implemented.
 """
 
-import os
-
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -81,8 +79,15 @@ app = FastAPI(
 # unless that origin is allowed here. In development that is the Vite dev server; when
 # deployed, the platform injects the frontend's real URL as ALLOWED_ORIGINS (comma
 # separated). Point ALLOWED_ORIGINS at the real thing and nothing else has to change.
+#
+# Read via config_svc's `Settings` (not `os.getenv` directly): `Settings` parses
+# `backend/.env` as well as the process environment, so a value set only in the
+# gitignored .env file -- the normal way to configure a local or self-hosted
+# deployment -- is honoured here exactly like every other setting, instead of
+# silently falling back to the dev origins because it was never exported into
+# the process environment itself.
 _dev_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
-_allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+_allowed_origins = [o.strip() for o in get_settings().allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins or _dev_origins,

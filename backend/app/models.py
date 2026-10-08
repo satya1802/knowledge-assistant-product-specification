@@ -161,12 +161,20 @@ class MessageCitation(Base):
     message_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    document_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
-    )
-    chunk_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("document_chunks.id", ondelete="CASCADE"), nullable=False
-    )
+    # Deliberately *not* a `ForeignKey`: doc_svc's delete is a permanent,
+    # unconditional removal of a document plus its chunks ("open library"),
+    # and a citation's job is to remember what a past answer actually cited,
+    # not to guarantee that source still exists (conv_svc's
+    # `get_conversation` already handles a dangling id by looking the
+    # document up and returning `None` fields when it is gone). An
+    # `ondelete="CASCADE"` foreign key here would do the opposite of that on
+    # a real Postgres database: it would silently delete this citation the
+    # moment its document (or chunk) is deleted, erasing part of a
+    # conversation's persisted history, or -- with the default "no action"
+    # behaviour -- block the document delete entirely while any citation
+    # still references it. Neither is what AC-050 wants.
+    document_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    chunk_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     chip_number: Mapped[int] = mapped_column(Integer, nullable=False)
     excerpt: Mapped[str] = mapped_column(Text, nullable=False)
 

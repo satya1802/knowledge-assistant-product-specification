@@ -85,7 +85,10 @@ export interface DocumentsResponse {
 }
 
 export interface UploadRejection {
-  filename: string;
+  // Matches the backend's `{ name, reason }` shape (see
+  // `app.routers.documents.upload_documents`) -- the rejected file never
+  // became a `Document` row, so there is no `filename` field to name it by.
+  name: string;
   reason: string;
 }
 

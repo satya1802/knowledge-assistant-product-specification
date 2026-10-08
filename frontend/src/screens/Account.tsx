@@ -146,12 +146,18 @@ export default function Screen() {
       }
 
       setConfirmation("");
-      if (body && body.field) {
-        const fieldKey = FIELD_BY_API_NAME[body.field] || body.field;
-        setErrors({ [fieldKey]: body.detail || "That did not work. Try again." });
+      // FastAPI wraps whatever an HTTPException's `detail` argument was
+      // under a top-level "detail" key, so the field-specific shape the
+      // server sends -- { field, detail } -- arrives as `body.detail.field`
+      // / `body.detail.detail`, not `body.field` / `body.detail`.
+      const errorDetail = body && body.detail;
+      if (errorDetail && typeof errorDetail === "object" && errorDetail.field) {
+        const fieldKey = FIELD_BY_API_NAME[errorDetail.field] || errorDetail.field;
+        setErrors({ [fieldKey]: errorDetail.detail || "That did not work. Try again." });
       } else {
         setErrors({
-          current: (body && body.detail) || "That did not work. Try again.",
+          current:
+            (typeof errorDetail === "string" && errorDetail) || "That did not work. Try again.",
         });
       }
     } catch {

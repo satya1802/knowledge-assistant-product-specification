@@ -12,6 +12,7 @@ from app.config import Settings, get_settings
 from app.database import get_db
 from app.models import User
 from app.schemas import (
+    AuthResponse,
     ChangePasswordRequest,
     ChangePasswordResponse,
     LoginRequest,
@@ -45,16 +46,22 @@ CurrentUserDep = Annotated[User, Depends(require_session)]
 
 
 def _user_out(user: User) -> UserOut:
-    return UserOut(id=str(user.id), name=user.name, email=user.email, is_admin=user.is_admin)
+    return UserOut(
+        id=str(user.id),
+        name=user.name,
+        email=user.email,
+        is_admin=user.is_admin,
+        is_enabled=user.is_enabled,
+    )
 
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     payload: RegisterRequest,
     response: Response,
     db: DbSessionDep,
     settings: SettingsDep,
-) -> UserOut:
+) -> AuthResponse:
     if not settings.self_registration_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=REGISTRATION_DISABLED_ERROR
@@ -86,16 +93,16 @@ async def register(
     session = create_session(db, user, settings)
     set_session_cookie(response, session, settings)
 
-    return _user_out(user)
+    return AuthResponse(user=_user_out(user))
 
 
-@router.post("/login", response_model=UserOut)
+@router.post("/login", response_model=AuthResponse)
 async def login(
     payload: LoginRequest,
     response: Response,
     db: DbSessionDep,
     settings: SettingsDep,
-) -> UserOut:
+) -> AuthResponse:
     email = normalize_email(payload.email)
 
     if is_locked_out(db, email, settings):
@@ -117,7 +124,7 @@ async def login(
     session = create_session(db, user, settings)
     set_session_cookie(response, session, settings)
 
-    return _user_out(user)
+    return AuthResponse(user=_user_out(user))
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

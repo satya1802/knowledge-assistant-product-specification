@@ -42,6 +42,10 @@ def _document_event(document: Document) -> dict:
         "filename": document.filename,
         "status": document.status,
         "failure_reason": document.failure_reason,
+        # So a document that just turned "ready" over the live stream shows
+        # its real chunk count immediately, instead of the table being stuck
+        # on the "0 chunks" it had at upload time until the next full fetch.
+        "chunk_count": len(document.chunks),
     }
 
 

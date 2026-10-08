@@ -15,12 +15,13 @@ import logging
 import queue
 import threading
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import sessionmaker
 
 from app.config import Settings, get_settings
 from app.database import SessionLocal, get_db
@@ -118,6 +119,7 @@ async def _chat_event_stream(
     history: list[tuple[str, str]],
     settings: Settings,
     client: GeminiClient,
+    session_factory: Callable[[], DbSession] = SessionLocal,
 ) -> AsyncIterator[str]:
     # Emitted before any retrieval or model call: AC-038 requires the
     # stream to open and the user's own message to already be durable
@@ -127,7 +129,13 @@ async def _chat_event_stream(
         {"conversation_id": str(conversation_id), "message_id": str(assistant_message_id)},
     )
 
-    session = SessionLocal()
+    # Defaults to the process-wide `SessionLocal`, but the route passes a
+    # session factory bound to its own request's engine (see `ask()` /
+    # `regenerate()`) -- the same reason doc_svc's upload handler does this
+    # for its own background task: a test that overrides `get_db` onto a
+    # different engine must not have this generator silently read and write
+    # a different database than the request did.
+    session = session_factory()
     try:
         # Pure assembly: folds prior turns (oldest trimmed first, under the
         # configured budget) into a retrieval query and a prompt history
@@ -241,6 +249,10 @@ async def ask(
 
     assistant_message_id = uuid.uuid4()
 
+    # Bound to this request's own engine so the stream's own session reads
+    # and writes the same database the request did (see `_chat_event_stream`).
+    session_factory = sessionmaker(bind=db.get_bind(), autoflush=False, expire_on_commit=False)
+
     generator = _chat_event_stream(
         conversation_id=conversation.id,
         assistant_message_id=assistant_message_id,
@@ -248,6 +260,7 @@ async def ask(
         history=history,
         settings=settings,
         client=client,
+        session_factory=session_factory,
     )
     return StreamingResponse(generator, media_type="text/event-stream")
 
@@ -311,6 +324,10 @@ async def regenerate(
         load_recent_messages, db, conversation.id, prior_user_message.id
     )
 
+    # Bound to this request's own engine so the stream's own session reads
+    # and writes the same database the request did (see `_chat_event_stream`).
+    session_factory = sessionmaker(bind=db.get_bind(), autoflush=False, expire_on_commit=False)
+
     generator = _chat_event_stream(
         conversation_id=conversation.id,
         assistant_message_id=assistant_message_id,
@@ -318,5 +335,6 @@ async def regenerate(
         history=history,
         settings=settings,
         client=client,
+        session_factory=session_factory,
     )
     return StreamingResponse(generator, media_type="text/event-stream")

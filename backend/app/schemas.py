@@ -11,19 +11,6 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 
 
-class StubResponse(BaseModel):
-    """What a generated route returns until someone implements it.
-
-    A stub that returns a typed body rather than raising keeps the service
-    startable and its OpenAPI document complete, so the frontend can be built
-    against the agreed shape while the handlers are still being written.
-    """
-
-    endpoint: str
-    status: str = "not_implemented"
-    detail: str = "Scaffolded from the approved API spec; no behaviour yet."
-
-
 # --- auth_svc ----------------------------------------------------------
 
 
@@ -49,8 +36,21 @@ class UserOut(BaseModel):
     name: str
     email: str
     is_admin: bool
+    is_enabled: bool = True
 
     model_config = {"from_attributes": True}
+
+
+class AuthResponse(BaseModel):
+    """What `/api/auth/register` and `/api/auth/login` return.
+
+    The approved contract wraps the user in a `user` key (matching
+    `MeResponse` below, which the SPA's `useAuth()` reads the same way after
+    sign-in as it does on first load) rather than returning the user object
+    bare -- the frontend's `AuthProvider` only ever reads `res.user`.
+    """
+
+    user: UserOut
 
 
 class MeResponse(BaseModel):
@@ -111,3 +111,17 @@ class ConversationSummary(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- doc content (api_gateway) ------------------------------------------
+
+
+class DocsContentResponse(BaseModel):
+    """Content backing an in-app documentation screen.
+
+    `markdown` is always a static string this service itself owns -- never
+    anything sourced from `Settings` -- so there is no path by which a
+    secret (e.g. the Gemini API key) could end up rendered here.
+    """
+
+    markdown: str
