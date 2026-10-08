@@ -5,14 +5,18 @@ import { Icons } from "@/lib/icons";
 import { brand } from "@/lib/brand";
 import { useNavigate } from "@/lib/navigate";
 import {
+  ApiError,
+  deleteConversation,
   downloadDocument,
   fetchConversation,
+  fetchConversations,
   regenerateChat,
   streamChat,
   type ChatEndData,
   type ChatStartData,
   type ChatStreamHandlers,
   type Citation,
+  type ConversationSummary,
 } from "@/lib/api";
 
 const { Label } = UI;
@@ -127,9 +131,13 @@ export default function Screen() {
   const [toast, setToast] = React.useState("");
   const [pendingDelete, setPendingDelete] = React.useState<string | null>(null);
   const [speakingId, setSpeakingId] = React.useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = React.useState(true);
+  const [historyError, setHistoryError] = React.useState<string | null>(null);
 
   const idRef = React.useRef(500);
   const nextId = (prefix: string) => `${prefix || "m"}${idRef.current++}`;
+  const isLocalTempId = (id: string) => /^c\d+$/.test(id);
+  const chatQueryRef = React.useRef("");
 
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -182,6 +190,50 @@ export default function Screen() {
     const id = setTimeout(() => setToast(""), 2400);
     return () => clearTimeout(id);
   }, [toast]);
+
+  React.useEffect(() => {
+    chatQueryRef.current = chatQuery;
+  }, [chatQuery]);
+
+  const mergeSummaries = React.useCallback(
+    (prev: Conversation[], summaries: ConversationSummary[]): Conversation[] => {
+      const byId = new Map(prev.map((c) => [c.id, c]));
+      return summaries.map((s) => {
+        const existing = byId.get(s.id);
+        return existing
+          ? { ...existing, title: s.title, updated_at: s.updated_at }
+          : { id: s.id, title: s.title, updated_at: s.updated_at, messages: [] };
+      });
+    },
+    [],
+  );
+
+  const loadHistory = React.useCallback(
+    (query: string) => {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      fetchConversations(query)
+        .then((summaries) => {
+          setConversations((prev) => mergeSummaries(prev, summaries));
+        })
+        .catch((err) => {
+          setHistoryError(
+            err instanceof ApiError ? err.message : "Could not load your chat history.",
+          );
+        })
+        .finally(() => setHistoryLoading(false));
+    },
+    [mergeSummaries],
+  );
+
+  React.useEffect(() => {
+    const id = setTimeout(
+      () => loadHistory(chatQuery),
+      chatQuery.trim().length > 0 ? 300 : 0,
+    );
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatQuery]);
 
   React.useEffect(() => {
     if (endRef.current && endRef.current.scrollIntoView)
@@ -291,6 +343,9 @@ export default function Screen() {
         is_general_knowledge: !!data.is_general_knowledge,
       }));
       finishStream();
+      // Pulls the server-derived id/title for a brand-new conversation (and
+      // refreshes ordering for an existing one) without a page reload.
+      loadHistory(chatQueryRef.current);
     },
     onError: (message) => {
       updateMessage(tracker.get(), msgId, (m) => ({
@@ -511,18 +566,37 @@ export default function Screen() {
 
   const confirmDelete = () => {
     const id = pendingDelete;
+    setPendingDelete(null);
+    if (!id) return;
     if (activeStreamRef.current && activeStreamRef.current.convId === id) {
       activeStreamRef.current.controller.abort();
       activeStreamRef.current = null;
       setStreamingMsgId(null);
     }
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (activeId === id) {
-      setActiveId(null);
-      setPanel(null);
+    const removeLocally = () => {
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (activeId === id) {
+        setActiveId(null);
+        setPanel(null);
+      }
+    };
+    if (isLocalTempId(id)) {
+      // Never reached the server (streaming hadn't started yet) -- nothing
+      // to delete remotely.
+      removeLocally();
+      setToast("Conversation deleted");
+      return;
     }
-    setPendingDelete(null);
-    setToast("Conversation deleted");
+    deleteConversation(id)
+      .then(() => {
+        removeLocally();
+        setToast("Conversation deleted");
+      })
+      .catch((err) => {
+        setToast(
+          err instanceof ApiError ? err.message : "Could not delete this conversation.",
+        );
+      });
   };
 
   const openSource = (citation: Citation) => {
@@ -538,17 +612,12 @@ export default function Screen() {
 
   /* ---------- derived ---------- */
 
-  const filtered = conversations.filter((c) => {
-    const q = chatQuery.trim().toLowerCase();
-    if (!q) return true;
-    if (c.title.toLowerCase().includes(q)) return true;
-    return c.messages.some((m) => m.content.toLowerCase().includes(q));
-  });
-
+  // Search is server-side (`GET /api/conversations?q=`), so `conversations`
+  // already reflects the current `chatQuery` once `loadHistory` resolves.
   const ORDER = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"];
   const grouped = ORDER.map((label) => ({
     label,
-    items: filtered
+    items: conversations
       .filter((c) => groupOf(c.updated_at) === label)
       .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)),
   })).filter((g) => g.items.length > 0);
@@ -908,7 +977,25 @@ export default function Screen() {
         {sidebarOpen && (
           <div className="flex-1 min-h-0 overflow-y-auto mt-4 px-3 pb-3">
             <div className="h-px mb-3" style={{ backgroundColor: t.border }} />
-            {conversations.length === 0 ? (
+            {historyLoading && conversations.length === 0 ? (
+              <p className="text-xs leading-5 px-1 py-2" style={{ color: t.subtext }}>
+                Loading your chat history…
+              </p>
+            ) : historyError && conversations.length === 0 ? (
+              <div className="px-1 py-2">
+                <p className="text-xs leading-5" style={{ color: t.subtext }}>
+                  {historyError}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => loadHistory(chatQuery)}
+                  className={"mt-2 text-xs underline " + focusRing}
+                  style={fx({ color: brand.primaryColor })}
+                >
+                  Try again
+                </button>
+              </div>
+            ) : conversations.length === 0 ? (
               <p className="text-xs leading-5 px-1 py-2" style={{ color: t.subtext }}>
                 No saved chats yet. Your conversations appear here once you ask your first question.
               </p>

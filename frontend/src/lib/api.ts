@@ -256,6 +256,25 @@ export function fetchConversation(id: string): Promise<Conversation> {
   return apiFetch<Conversation>(`/api/conversations/${id}`);
 }
 
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  updated_at: string;
+}
+
+/** GET /api/conversations?q= -- the signed-in user's own conversations,
+ * newest first. `q`, when non-empty, narrows the list server-side to
+ * conversations whose title or message text matches it. */
+export function fetchConversations(q?: string): Promise<ConversationSummary[]> {
+  const query = q && q.trim().length > 0 ? `?q=${encodeURIComponent(q.trim())}` : "";
+  return apiFetch<ConversationSummary[]>(`/api/conversations${query}`);
+}
+
+/** DELETE /api/conversations/{id}. */
+export function deleteConversation(id: string): Promise<void> {
+  return apiFetch<void>(`/api/conversations/${id}`, { method: "DELETE" });
+}
+
 export interface ChatStartData {
   conversation_id?: string;
   message_id?: string;
@@ -330,7 +349,8 @@ function dispatchChatFrame(event: string, data: string, handlers: ChatStreamHand
       handlers.onCitation?.(toCitation(parsed));
     } else if (event === "citations" && Array.isArray(parsed.citations)) {
       for (const raw of parsed.citations as unknown[]) {
-        if (raw && typeof raw === "object") handlers.onCitation?.(toCitation(raw as Record<string, unknown>));
+        if (raw && typeof raw === "object")
+          handlers.onCitation?.(toCitation(raw as Record<string, unknown>));
       }
     } else if (event === "message.end" || event === "done") {
       handlers.onEnd?.({
