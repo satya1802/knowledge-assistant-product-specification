@@ -456,7 +456,11 @@ export default function Screen() {
               "inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-sm font-semibold transition-opacity hover:opacity-90 " +
               focusRing
             }
-            style={fx({ backgroundColor: t.primary, color: t.onPrimary, borderRadius: brand.radius })}
+            style={fx({
+              backgroundColor: t.primary,
+              color: t.onPrimary,
+              borderRadius: brand.radius,
+            })}
           >
             Ask a question
             <Icons.ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -470,7 +474,12 @@ export default function Screen() {
           Library statistics
         </h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="Total documents" value={counts.total} hint="in the shared library" t={t} />
+          <StatCard
+            label="Total documents"
+            value={counts.total}
+            hint="in the shared library"
+            t={t}
+          />
           <StatCard
             label="Ready"
             value={counts.ready}
@@ -485,7 +494,13 @@ export default function Screen() {
             hint="parsing, chunking, embedding"
             t={t}
           />
-          <StatCard label="Failed" value={counts.failed} tone={t.fail} hint="needs re-upload" t={t} />
+          <StatCard
+            label="Failed"
+            value={counts.failed}
+            tone={t.fail}
+            hint="needs re-upload"
+            t={t}
+          />
         </div>
       </section>
 
@@ -727,7 +742,11 @@ export default function Screen() {
                   "mt-5 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold hover:opacity-90 " +
                   focusRing
                 }
-                style={fx({ backgroundColor: t.primary, color: t.onPrimary, borderRadius: brand.radius })}
+                style={fx({
+                  backgroundColor: t.primary,
+                  color: t.onPrimary,
+                  borderRadius: brand.radius,
+                })}
               >
                 <Icons.Plus className="h-4 w-4" aria-hidden="true" />
                 Upload a document
@@ -1015,7 +1034,11 @@ export default function Screen() {
                   "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold hover:opacity-90 " +
                   focusRing
                 }
-                style={fx({ backgroundColor: "#C43F36", color: "#FFFFFF", borderRadius: brand.radius })}
+                style={fx({
+                  backgroundColor: "#C43F36",
+                  color: "#FFFFFF",
+                  borderRadius: brand.radius,
+                })}
               >
                 <Icons.Trash className="h-4 w-4" aria-hidden="true" />
                 Delete permanently
