@@ -136,9 +136,7 @@ export default function Screen() {
         setConfirm("");
         setReveal(false);
         setLastChanged("Today, just now");
-        setConfirmation(
-          (body && body.detail) || "Password changed.",
-        );
+        setConfirmation((body && body.detail) || "Password changed.");
         return;
       }
 
