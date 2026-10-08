@@ -220,3 +220,149 @@ export function subscribeToDocumentStream(handlers: DocumentStreamHandlers): () 
     source.close();
   };
 }
+
+// --- Chat & conversations -------------------------------------------------
+
+export interface Citation {
+  chip_number: number;
+  document_id: string;
+  excerpt: string;
+  document_filename?: string;
+  document_file_type?: string;
+  document_size_bytes?: number;
+  document_uploaded_by?: string;
+  document_uploaded_at?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations?: Citation[];
+  is_general_knowledge?: boolean;
+  created_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  updated_at: string;
+  messages: ChatMessage[];
+}
+
+/** GET /api/conversations/{id} -- the full persisted thread, used when a
+ * conversation is reopened so it renders identically to what was streamed. */
+export function fetchConversation(id: string): Promise<Conversation> {
+  return apiFetch<Conversation>(`/api/conversations/${id}`);
+}
+
+export interface ChatDoneData {
+  message_id?: string;
+  conversation_id?: string;
+  is_general_knowledge?: boolean;
+}
+
+export interface ChatStreamHandlers {
+  onToken?: (text: string) => void;
+  onCitations?: (citations: Citation[]) => void;
+  onDone?: (data: ChatDoneData) => void;
+  onError?: (message: string) => void;
+}
+
+interface ChatStreamRequest {
+  conversation_id: string | null;
+  question: string;
+}
+
+function parseSseFrame(frame: string): { event: string; data: string } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of frame.split("\n")) {
+    if (!line || line.startsWith(":")) continue;
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+  }
+  if (dataLines.length === 0) return null;
+  return { event, data: dataLines.join("\n") };
+}
+
+function dispatchChatFrame(event: string, data: string, handlers: ChatStreamHandlers): void {
+  try {
+    const parsed = JSON.parse(data) as Record<string, unknown>;
+    if (event === "token" && typeof parsed.text === "string") {
+      handlers.onToken?.(parsed.text);
+    } else if (event === "citations" && Array.isArray(parsed.citations)) {
+      handlers.onCitations?.(parsed.citations as Citation[]);
+    } else if (event === "done") {
+      handlers.onDone?.(parsed as ChatDoneData);
+    } else if (event === "error") {
+      const detail =
+        typeof parsed.detail === "string"
+          ? parsed.detail
+          : "Something went wrong while generating this answer.";
+      handlers.onError?.(detail);
+    }
+  } catch {
+    // Not JSON (e.g. a stray keep-alive comment) -- ignore it.
+  }
+}
+
+/** POST /api/chat, SSE parsed off the fetch response body stream rather
+ * than via `EventSource` -- `EventSource` cannot send a POST body, so the
+ * frames ("event: ...\ndata: ...\n\n") are decoded and split by hand.
+ * Resolves once the stream ends, whether by a "done" event, an "error"
+ * event, or the caller aborting via `signal`. */
+export async function streamChat(
+  request: ChatStreamRequest,
+  handlers: ChatStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/chat`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      signal,
+    });
+  } catch {
+    if (signal?.aborted) return;
+    handlers.onError?.("Could not reach the server. Check your connection and try again.");
+    return;
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 && unauthorizedHandler) unauthorizedHandler();
+    const fallback = `POST /api/chat failed: ${response.status}`;
+    const message = await extractMessage(response, fallback);
+    handlers.onError?.(message);
+    return;
+  }
+  if (!response.body) {
+    handlers.onError?.("The server did not return a stream.");
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const parsed = parseSseFrame(frame);
+        if (parsed) dispatchChatFrame(parsed.event, parsed.data, handlers);
+        boundary = buffer.indexOf("\n\n");
+      }
+    }
+  } catch {
+    if (signal?.aborted) return;
+    handlers.onError?.("The connection was lost while the answer was streaming.");
+  }
+}

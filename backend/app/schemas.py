@@ -65,4 +65,33 @@ class ChangePasswordResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     conversation_id: str | None = None
-    question: str = Field(min_length=1)
+    content: str = Field(min_length=0)
+
+
+# --- conv_svc --------------------------------------------------------------
+
+
+class CitationOut(BaseModel):
+    id: str
+    document_id: str
+    chunk_id: str
+    chip_number: int
+    excerpt: str
+
+    model_config = {"from_attributes": True}
+
+
+class MessageOut(BaseModel):
+    id: str
+    role: str
+    content: str
+    is_general_knowledge: bool
+    citations: list[CitationOut]
+
+    model_config = {"from_attributes": True}
+
+
+class ConversationDetail(BaseModel):
+    id: str
+    title: str
+    messages: list[MessageOut]
