@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session as DbSession
 
 from app.database import get_db
-from app.models import Conversation, User
+from app.models import Conversation, Document, User
 from app.schemas import CitationOut, ConversationDetail, MessageOut, StubResponse
 from app.services.auth import require_session
 
@@ -48,6 +48,24 @@ async def get_conversation(
 
     messages = sorted(conversation.messages, key=lambda m: m.created_at)
 
+    def _citation_out(citation) -> CitationOut:
+        # AC-050: a deleted document leaves the citation row intact (no
+        # cross-table cascade from Document to MessageCitation), so this is
+        # a plain lookup that returns None rather than erroring.
+        document = db.get(Document, citation.document_id)
+        return CitationOut(
+            chip_number=citation.chip_number,
+            document_id=str(citation.document_id),
+            excerpt=citation.excerpt,
+            document_filename=document.filename if document else None,
+            document_file_type=document.file_type if document else None,
+            document_size_bytes=document.size_bytes if document else None,
+            document_uploaded_by=(
+                str(document.uploaded_by) if document and document.uploaded_by else None
+            ),
+            document_uploaded_at=document.uploaded_at.isoformat() if document else None,
+        )
+
     return ConversationDetail(
         id=str(conversation.id),
         title=conversation.title,
@@ -58,13 +76,7 @@ async def get_conversation(
                 content=message.content,
                 is_general_knowledge=message.is_general_knowledge,
                 citations=[
-                    CitationOut(
-                        id=str(citation.id),
-                        document_id=str(citation.document_id),
-                        chunk_id=str(citation.chunk_id),
-                        chip_number=citation.chip_number,
-                        excerpt=citation.excerpt,
-                    )
+                    _citation_out(citation)
                     for citation in sorted(message.citations, key=lambda c: c.chip_number)
                 ],
             )

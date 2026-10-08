@@ -65,18 +65,21 @@ class ChangePasswordResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     conversation_id: str | None = None
-    content: str = Field(min_length=0)
+    question: str = Field(min_length=0)
 
 
 # --- conv_svc --------------------------------------------------------------
 
 
 class CitationOut(BaseModel):
-    id: str
-    document_id: str
-    chunk_id: str
     chip_number: int
+    document_id: str
     excerpt: str
+    document_filename: str | None = None
+    document_file_type: str | None = None
+    document_size_bytes: int | None = None
+    document_uploaded_by: str | None = None
+    document_uploaded_at: str | None = None
 
     model_config = {"from_attributes": True}
 

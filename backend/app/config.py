@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     max_upload_mb: int = Field(default=25)
     relevance_threshold: float = Field(default=0.75)
 
+    # --- Chat context (chat_svc) ----------------------------------------
+    # Upper bound, in characters, on how much prior-turn history is folded
+    # into the retrieval query and generation prompt for a single request.
+    # Oldest turns are trimmed first; the current question is never trimmed.
+    chat_history_char_budget: int = Field(default=4000)
+
     # --- Object store ----------------------------------------------------
     storage_backend: str = Field(default="local")  # "local" | "s3"
     storage_path: str = Field(default="./data/uploads")

@@ -27,6 +27,7 @@ from app.database import SessionLocal, get_db
 from app.models import Conversation, DocumentChunk, Message, MessageCitation, User
 from app.schemas import ChatRequest
 from app.services.auth import require_session
+from app.services.context import assemble_context, load_recent_messages
 from app.services.gemini import GeminiClient, GeminiOverloadedError, get_gemini_client
 from app.services.retrieval import retrieve_chunks
 from app.services.sse import KEEPALIVE_COMMENT, drain_with_keepalive, format_event
@@ -72,10 +73,12 @@ def _get_or_create_conversation(
     return conversation
 
 
-def _build_prompt(question: str, chunks: list[DocumentChunk]) -> str:
+def _build_prompt(question: str, chunks: list[DocumentChunk], history_text: str = "") -> str:
+    history_block = f"Conversation so far:\n{history_text}\n\n" if history_text else ""
     if not chunks:
         return (
-            "You are a helpful enterprise assistant. No relevant internal "
+            history_block
+            + "You are a helpful enterprise assistant. No relevant internal "
             "documents were found for this question, so answer it from general "
             "knowledge and make clear that the answer is not sourced from the "
             "knowledge base.\n\n"
@@ -83,7 +86,8 @@ def _build_prompt(question: str, chunks: list[DocumentChunk]) -> str:
         )
     context = "\n\n".join(f"[{i}] {chunk.content}" for i, chunk in enumerate(chunks, start=1))
     return (
-        "You are a helpful enterprise assistant. Answer the question using only "
+        history_block
+        + "You are a helpful enterprise assistant. Answer the question using only "
         "the numbered context below, citing sources inline like [1]. If the "
         "context does not contain the answer, say so plainly.\n\n"
         f"Context:\n{context}\n\nQuestion: {question}"
@@ -113,6 +117,7 @@ async def _chat_event_stream(
     conversation_id: uuid.UUID,
     assistant_message_id: uuid.UUID,
     question: str,
+    history: list[tuple[str, str]],
     settings: Settings,
     client: GeminiClient,
 ) -> AsyncIterator[str]:
@@ -126,9 +131,16 @@ async def _chat_event_stream(
 
     session = SessionLocal()
     try:
-        chunks = await asyncio.to_thread(retrieve_chunks, session, question, client, settings)
+        # Pure assembly: folds prior turns (oldest trimmed first, under the
+        # configured budget) into a retrieval query and a prompt history
+        # block (AC-051, AC-052). `history` only ever comes from this same
+        # conversation (AC-053).
+        context = assemble_context(history, question, settings.chat_history_char_budget)
+        chunks = await asyncio.to_thread(
+            retrieve_chunks, session, context.retrieval_query, client, settings
+        )
         is_general_knowledge = len(chunks) == 0
-        prompt = _build_prompt(question, chunks)
+        prompt = _build_prompt(question, chunks, context.history_text)
 
         q: queue.Queue[Any] = queue.Queue()
         done = object()
@@ -228,12 +240,18 @@ async def ask(
     db.commit()
     db.refresh(user_message)
 
+    # Off the event loop (AC-052): a synchronous DB read of this
+    # conversation's own prior turns only, never another conversation's
+    # (AC-053), and never blocks the SSE stream from opening.
+    history = await asyncio.to_thread(load_recent_messages, db, conversation.id, user_message.id)
+
     assistant_message_id = uuid.uuid4()
 
     generator = _chat_event_stream(
         conversation_id=conversation.id,
         assistant_message_id=assistant_message_id,
         question=content,
+        history=history,
         settings=settings,
         client=client,
     )
