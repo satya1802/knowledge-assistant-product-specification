@@ -62,8 +62,7 @@ async def list_conversations(
             Message.content.ilike(pattern)
         )
         query = query.filter(
-            (Conversation.title.ilike(pattern))
-            | (Conversation.id.in_(matching_conversation_ids))
+            (Conversation.title.ilike(pattern)) | (Conversation.id.in_(matching_conversation_ids))
         )
 
     conversations = query.all()
