@@ -284,10 +284,7 @@ const ENDPOINTS: Endpoint[] = [
         desc: "Document identifier.",
       },
     ],
-    request: [
-      "GET /api/documents/doc_example/download",
-      "Cookie: ka_session=<opaque>",
-    ].join("\n"),
+    request: ["GET /api/documents/doc_example/download", "Cookie: ka_session=<opaque>"].join("\n"),
     response: [
       "200 OK",
       "Content-Type: application/pdf",
@@ -375,10 +372,7 @@ const ENDPOINTS: Endpoint[] = [
         desc: "Assistant message to replace.",
       },
     ],
-    request: [
-      "POST /api/chat/msg_example/regenerate",
-      "Cookie: ka_session=<opaque>",
-    ].join("\n"),
+    request: ["POST /api/chat/msg_example/regenerate", "Cookie: ka_session=<opaque>"].join("\n"),
     response: [
       "200 OK",
       "Content-Type: text/event-stream",
@@ -488,7 +482,10 @@ const GROUP_ORDER: Endpoint["group"][] = [
   "Docs",
 ];
 
-const METHOD_STYLE: Record<Method, { color: string; backgroundColor: string; borderColor: string }> = {
+const METHOD_STYLE: Record<
+  Method,
+  { color: string; backgroundColor: string; borderColor: string }
+> = {
   GET: {
     color: "#9CC5FF",
     backgroundColor: "rgba(91,156,248,0.13)",
@@ -548,8 +545,8 @@ export default function ApiReference() {
           <p className="mt-3 text-[15px] leading-7" style={{ color: muted }}>
             Every HTTP endpoint behind this product: authentication, the shared knowledge base,
             streamed chat and your private conversations. These are the application&rsquo;s own
-            endpoints — nothing here calls a model provider directly, and no key or credential
-            value appears anywhere on this page.
+            endpoints — nothing here calls a model provider directly, and no key or credential value
+            appears anywhere on this page.
           </p>
         </header>
 
@@ -572,9 +569,16 @@ export default function ApiReference() {
                     <li
                       key={e.id}
                       className="overflow-hidden rounded-xl border"
-                      style={{ borderColor: LINE, backgroundColor: PANEL, borderRadius: brand.radius }}
+                      style={{
+                        borderColor: LINE,
+                        backgroundColor: PANEL,
+                        borderRadius: brand.radius,
+                      }}
                     >
-                      <div className="flex flex-wrap items-center gap-3 border-b px-4 py-4" style={{ borderColor: LINE }}>
+                      <div
+                        className="flex flex-wrap items-center gap-3 border-b px-4 py-4"
+                        style={{ borderColor: LINE }}
+                      >
                         <span
                           className="shrink-0 rounded border px-2 py-0.5 text-[11px] font-bold tracking-wide"
                           style={{

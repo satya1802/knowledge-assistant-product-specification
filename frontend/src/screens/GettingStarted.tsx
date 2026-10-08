@@ -33,8 +33,7 @@ const SECTIONS: Section[] = [
     id: "sources",
     title: "What the source chips mean",
     icon: "FileText",
-    summary:
-      "Numbered chips under an answer point to the document each statement was drawn from.",
+    summary: "Numbered chips under an answer point to the document each statement was drawn from.",
     points: [
       "A chip's number matches the bracketed reference in the answer text, so [2] in a " +
         "sentence is chip 2 below it.",

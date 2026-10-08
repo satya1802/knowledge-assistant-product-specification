@@ -9,9 +9,7 @@ test.describe("Getting started — reachable while signed in (AC-086)", () => {
     await page.getByRole("link", { name: "Getting started" }).click();
     await expect(page).toHaveURL(/\/getting-started$/);
 
-    await expect(
-      page.getByRole("heading", { name: "Ask your first question" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Ask your first question" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Read the source chips" })).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Add documents to the knowledge base" }),
@@ -25,9 +23,7 @@ test.describe("Getting started — reachable while signed in (AC-086)", () => {
 test.describe("Getting started — mobile readability (AC-087)", () => {
   test.use({ viewport: { width: 375, height: 667 } });
 
-  test("has no horizontal overflow at 375px and returns to chat in one click", async ({
-    page,
-  }) => {
+  test("has no horizontal overflow at 375px and returns to chat in one click", async ({ page }) => {
     await registerAndSignIn(page);
 
     await page.goto("/getting-started");

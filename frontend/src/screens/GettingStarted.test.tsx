@@ -16,7 +16,9 @@ describe("GettingStarted", () => {
     expect(screen.getByText(/What the source chips mean/i)).toBeInTheDocument();
     expect(screen.getByText(/Uploading documents/i)).toBeInTheDocument();
     expect(screen.getByText(/shared, open knowledge base/i)).toBeInTheDocument();
-    expect(screen.getByText(/signed-in employee may upload, download or delete/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/signed-in employee may upload, download or delete/i),
+    ).toBeInTheDocument();
   });
 
   it("AC-087: exposes exactly one control that returns to chat", () => {

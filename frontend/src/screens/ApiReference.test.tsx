@@ -26,10 +26,7 @@ describe("ApiReference", () => {
       "/api/documents/{document_id}",
     ];
     const chatPaths = ["/api/chat", "/api/chat/{message_id}/regenerate"];
-    const conversationPaths = [
-      "/api/conversations",
-      "/api/conversations/{conversation_id}",
-    ];
+    const conversationPaths = ["/api/conversations", "/api/conversations/{conversation_id}"];
     const docsPaths = ["/api/docs/getting-started", "/api/docs/api-reference"];
 
     for (const path of [
