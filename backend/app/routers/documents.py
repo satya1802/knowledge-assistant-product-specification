@@ -25,7 +25,7 @@ from app.config import Settings, get_settings
 from app.database import get_db
 from app.models import Document
 from app.object_store import LocalObjectStore, get_object_store
-from app.services.extraction import SUPPORTED_FILE_TYPES
+from app.services.extraction import CONTENT_TYPES, SUPPORTED_FILE_TYPES
 from app.services.ingestion import ingest_document
 from app.services.sse import get_document_broker
 
@@ -181,9 +181,11 @@ async def download_document(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from exc
 
+    content_type = CONTENT_TYPES.get(document.file_type, "application/octet-stream")
+
     return Response(
         content=data,
-        media_type="application/octet-stream",
+        media_type=content_type,
         headers={"Content-Disposition": f'attachment; filename="{document.filename}"'},
     )
 

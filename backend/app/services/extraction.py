@@ -21,6 +21,16 @@ from pypdf.errors import PdfReadError
 
 SUPPORTED_FILE_TYPES = {"pdf", "docx", "txt", "md"}
 
+# AC-032: the download endpoint serves the original bytes back with a
+# Content-Type derived from the file's extension, never a blanket
+# application/octet-stream.
+CONTENT_TYPES = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt": "text/plain",
+    "md": "text/markdown",
+}
+
 
 class ExtractionError(RuntimeError):
     """A short, human-readable reason -- used verbatim as `failure_reason`."""

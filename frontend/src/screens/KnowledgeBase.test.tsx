@@ -129,9 +129,22 @@ function stubFetch(handlers: Record<string, unknown> = {}) {
         jsonResponse(200, { user: SIGNED_IN_USER, self_registration_enabled: true }),
       );
     }
-    const key = Object.keys(handlers).find((k) => url.includes(k));
+    const key = Object.keys(handlers)
+      .filter((k) => url.includes(k))
+      .sort((a, b) => b.length - a.length)[0];
     if (key) {
-      const h = handlers[key] as { status: number; body: unknown };
+      const h = handlers[key] as { status: number; body?: unknown; blob?: Blob };
+      if (h.blob) {
+        return Promise.resolve({
+          ok: h.status >= 200 && h.status < 300,
+          status: h.status,
+          blob: async () => h.blob,
+          json: async () => h.body ?? {},
+          clone() {
+            return this;
+          },
+        });
+      }
       return Promise.resolve(jsonResponse(h.status, h.body));
     }
     return Promise.resolve(jsonResponse(404, { detail: "not found" }));
@@ -332,6 +345,155 @@ describe("KnowledgeBase", () => {
 
     await waitFor(() =>
       expect(screen.queryByText("Employee-Handbook.pdf")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("AC-034: delete is offered for a document uploaded by someone else, and the dialog names it and warns it is permanent", async () => {
+    await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByLabelText("Delete Employee-Handbook.pdf"));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/Employee-Handbook\.pdf/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/cannot be undone/i)).toBeInTheDocument();
+  });
+
+  it("AC-037: cancel closes the dialog, sends no request, and the document remains Ready", async () => {
+    const fetchMock = await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByLabelText("Delete Employee-Handbook.pdf"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    const callsBefore = fetchMock.mock.calls.length;
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
+    expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument();
+    expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
+  });
+
+  it("the confirmation dialog is dismissable with Escape", async () => {
+    await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByLabelText("Delete Employee-Handbook.pdf"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("AC-035: on confirm, stats update live without a manual refresh", async () => {
+    await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY, DOC_FAILED]) },
+      "/api/documents/doc_1": { status: 204, body: undefined },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    const statsSectionBefore = screen.getByText("Total documents").closest("div")!.parentElement!;
+    expect(within(statsSectionBefore).getByText("2")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("Delete Employee-Handbook.pdf"));
+    await userEvent.click(screen.getByRole("button", { name: /Delete permanently/ }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Employee-Handbook.pdf")).not.toBeInTheDocument(),
+    );
+    const totalCardAfter = screen.getByText("Total documents").closest("div")!;
+    expect(within(totalCardAfter).getByText("1")).toBeInTheDocument();
+  });
+
+  it("a failed delete shows the server's own detail text inline, and the row remains", async () => {
+    await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
+      "/api/documents/doc_1": {
+        status: 400,
+        body: { detail: "Document is referenced by an active chat." },
+      },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByLabelText("Delete Employee-Handbook.pdf"));
+    await userEvent.click(screen.getByRole("button", { name: /Delete permanently/ }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Document is referenced by an active chat.")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument();
+  });
+
+  it("a 401 on delete routes the user to sign-in", async () => {
+    await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
+      "/api/documents/doc_1": { status: 401, body: { detail: "Session expired." } },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByLabelText("Delete Employee-Handbook.pdf"));
+    await userEvent.click(screen.getByRole("button", { name: /Delete permanently/ }));
+
+    await waitFor(() => expect(screen.getByLabelText("Email address")).toBeInTheDocument());
+  });
+
+  it("AC-032: download calls downloadDocument with credentials and saves the file under its original name", async () => {
+    const blob = new Blob(["file-contents"], { type: "application/pdf" });
+    const fetchMock = await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
+      "/api/documents/doc_1/download": { status: 200, blob },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    const createObjectURL = vi.fn().mockReturnValue("blob:fake-url");
+    const revokeObjectURL = vi.fn();
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
+
+    let capturedDownloadName = "";
+    const appendSpy = vi.spyOn(document.body, "appendChild").mockImplementation((node) => {
+      capturedDownloadName = (node as HTMLAnchorElement).download;
+      return node;
+    });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    await userEvent.click(screen.getByLabelText("Download Employee-Handbook.pdf"));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/documents/doc_1/download"),
+        expect.objectContaining({ credentials: "include" }),
+      ),
+    );
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(capturedDownloadName).toBe("Employee-Handbook.pdf");
+
+    appendSpy.mockRestore();
+    clickSpy.mockRestore();
+  });
+
+  it("a failed download shows the server's own detail text inline", async () => {
+    await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
+      "/api/documents/doc_1/download": {
+        status: 404,
+        body: { detail: "The original file is no longer available." },
+      },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByLabelText("Download Employee-Handbook.pdf"));
+
+    await waitFor(() =>
+      expect(screen.getByText("The original file is no longer available.")).toBeInTheDocument(),
     );
   });
 });
