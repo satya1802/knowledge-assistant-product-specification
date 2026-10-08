@@ -80,7 +80,13 @@ describe("SignIn", () => {
         "/api/auth/login": {
           status: 200,
           body: {
-            user: { id: "u2", name: "Marcus Webb", email: "m@x.com", is_admin: false, is_enabled: true },
+            user: {
+              id: "u2",
+              name: "Marcus Webb",
+              email: "m@x.com",
+              is_admin: false,
+              is_enabled: true,
+            },
           },
         },
       },

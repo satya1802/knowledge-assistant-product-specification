@@ -65,10 +65,7 @@ function AppShell() {
       </aside>
       <main className="flex-1 overflow-auto">
         <Routes>
-          <Route
-            path="/sign-in"
-            element={user ? <Navigate to="/chat" replace /> : <SignIn />}
-          />
+          <Route path="/sign-in" element={user ? <Navigate to="/chat" replace /> : <SignIn />} />
           <Route
             path="/chat"
             element={
