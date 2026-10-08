@@ -256,22 +256,27 @@ export function fetchConversation(id: string): Promise<Conversation> {
   return apiFetch<Conversation>(`/api/conversations/${id}`);
 }
 
-export interface ChatDoneData {
-  message_id?: string;
+export interface ChatStartData {
   conversation_id?: string;
+  message_id?: string;
+}
+
+export interface ChatEndData {
+  message_id?: string;
   is_general_knowledge?: boolean;
 }
 
 export interface ChatStreamHandlers {
+  onStart?: (data: ChatStartData) => void;
   onToken?: (text: string) => void;
-  onCitations?: (citations: Citation[]) => void;
-  onDone?: (data: ChatDoneData) => void;
+  onCitation?: (citation: Citation) => void;
+  onEnd?: (data: ChatEndData) => void;
   onError?: (message: string) => void;
 }
 
 interface ChatStreamRequest {
   conversation_id: string | null;
-  question: string;
+  content: string;
 }
 
 function parseSseFrame(frame: string): { event: string; data: string } | null {
@@ -286,44 +291,60 @@ function parseSseFrame(frame: string): { event: string; data: string } | null {
   return { event, data: dataLines.join("\n") };
 }
 
+/** Maps the backend's own SSE event names -- `message.start`, `token`,
+ * `citation` (one per source, not a batch), `message.end` and `error` --
+ * onto the typed handlers above. */
 function dispatchChatFrame(event: string, data: string, handlers: ChatStreamHandlers): void {
   try {
     const parsed = JSON.parse(data) as Record<string, unknown>;
-    if (event === "token" && typeof parsed.text === "string") {
+    if (event === "message.start") {
+      handlers.onStart?.({
+        conversation_id:
+          typeof parsed.conversation_id === "string" ? parsed.conversation_id : undefined,
+        message_id: typeof parsed.message_id === "string" ? parsed.message_id : undefined,
+      });
+    } else if (event === "token" && typeof parsed.text === "string") {
       handlers.onToken?.(parsed.text);
-    } else if (event === "citations" && Array.isArray(parsed.citations)) {
-      handlers.onCitations?.(parsed.citations as Citation[]);
-    } else if (event === "done") {
-      handlers.onDone?.(parsed as ChatDoneData);
+    } else if (event === "citation") {
+      handlers.onCitation?.({
+        chip_number: typeof parsed.chip_number === "number" ? parsed.chip_number : 0,
+        document_id: typeof parsed.document_id === "string" ? parsed.document_id : "",
+        excerpt: typeof parsed.excerpt === "string" ? parsed.excerpt : "",
+      });
+    } else if (event === "message.end") {
+      handlers.onEnd?.({
+        message_id: typeof parsed.message_id === "string" ? parsed.message_id : undefined,
+        is_general_knowledge: !!parsed.is_general_knowledge,
+      });
     } else if (event === "error") {
-      const detail =
-        typeof parsed.detail === "string"
-          ? parsed.detail
+      const message =
+        typeof parsed.message === "string"
+          ? parsed.message
           : "Something went wrong while generating this answer.";
-      handlers.onError?.(detail);
+      handlers.onError?.(message);
     }
   } catch {
     // Not JSON (e.g. a stray keep-alive comment) -- ignore it.
   }
 }
 
-/** POST /api/chat, SSE parsed off the fetch response body stream rather
- * than via `EventSource` -- `EventSource` cannot send a POST body, so the
- * frames ("event: ...\ndata: ...\n\n") are decoded and split by hand.
- * Resolves once the stream ends, whether by a "done" event, an "error"
- * event, or the caller aborting via `signal`. */
-export async function streamChat(
-  request: ChatStreamRequest,
+/** Shared by `streamChat` and `regenerateChat`: issues the POST, then reads
+ * and parses the SSE body stream by hand -- `EventSource` cannot send a POST
+ * body, so the frames ("event: ...\ndata: ...\n\n") are decoded and split
+ * here instead. Resolves once the stream ends, whether by a "message.end"
+ * event, an "error" event, or the caller aborting via `signal`. */
+async function consumeChatStream(
+  path: string,
+  init: RequestInit,
   handlers: ChatStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/chat`, {
-      method: "POST",
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
+      headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
       signal,
     });
   } catch {
@@ -334,7 +355,7 @@ export async function streamChat(
 
   if (!response.ok) {
     if (response.status === 401 && unauthorizedHandler) unauthorizedHandler();
-    const fallback = `POST /api/chat failed: ${response.status}`;
+    const fallback = `${init.method ?? "POST"} ${path} failed: ${response.status}`;
     const message = await extractMessage(response, fallback);
     handlers.onError?.(message);
     return;
@@ -365,4 +386,35 @@ export async function streamChat(
     if (signal?.aborted) return;
     handlers.onError?.("The connection was lost while the answer was streaming.");
   }
+}
+
+/** POST /api/chat -- `content` plus the conversation to continue, or `null`
+ * to start a new one. */
+export function streamChat(
+  request: ChatStreamRequest,
+  handlers: ChatStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  return consumeChatStream(
+    "/api/chat",
+    { method: "POST", body: JSON.stringify(request) },
+    handlers,
+    signal,
+  );
+}
+
+/** POST /api/chat/{message_id}/regenerate -- re-runs the answer for an
+ * existing assistant message, streamed with the same event shape as
+ * `streamChat`, in the same conversation context. */
+export function regenerateChat(
+  messageId: string,
+  handlers: ChatStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  return consumeChatStream(
+    `/api/chat/${messageId}/regenerate`,
+    { method: "POST" },
+    handlers,
+    signal,
+  );
 }

@@ -7,8 +7,11 @@ import { useNavigate } from "@/lib/navigate";
 import {
   downloadDocument,
   fetchConversation,
+  regenerateChat,
   streamChat,
-  type ChatDoneData,
+  type ChatEndData,
+  type ChatStartData,
+  type ChatStreamHandlers,
   type Citation,
 } from "@/lib/api";
 
@@ -16,6 +19,7 @@ const { Label } = UI;
 
 interface ChatMessage {
   id: string;
+  serverId?: string;
   role: "user" | "assistant";
   content: string;
   citations?: Citation[];
@@ -241,51 +245,103 @@ export default function Screen() {
     setStreamingMsgId(null);
   };
 
+  /** Tracks the conversation id a stream is writing into -- a brand-new
+   * conversation's temporary client id is replaced by the server's real id
+   * as soon as `message.start` arrives, and every subsequent handler call
+   * (and `activeStreamRef`, used by Stop) has to follow that rename. */
+  const makeConvIdTracker = (initial: string) => {
+    let current = initial;
+    return {
+      get: () => current,
+      set: (id: string) => {
+        if (!id || id === current) return;
+        const prev = current;
+        current = id;
+        setConversations((p) => p.map((c) => (c.id === prev ? { ...c, id } : c)));
+        setActiveId((a) => (a === prev ? id : a));
+        if (activeStreamRef.current && activeStreamRef.current.convId === prev) {
+          activeStreamRef.current = { ...activeStreamRef.current, convId: id };
+        }
+      },
+    };
+  };
+
+  const buildStreamHandlers = (
+    msgId: string,
+    tracker: ReturnType<typeof makeConvIdTracker>,
+  ): ChatStreamHandlers => ({
+    onStart: (data: ChatStartData) => {
+      if (data.conversation_id) tracker.set(data.conversation_id);
+      if (data.message_id) {
+        updateMessage(tracker.get(), msgId, (m) => ({ ...m, serverId: data.message_id }));
+      }
+    },
+    onToken: (text) =>
+      updateMessage(tracker.get(), msgId, (m) => ({ ...m, content: m.content + text })),
+    onCitation: (citation) =>
+      updateMessage(tracker.get(), msgId, (m) => ({
+        ...m,
+        citations: [...(m.citations || []), citation],
+      })),
+    onEnd: (data: ChatEndData) => {
+      updateMessage(tracker.get(), msgId, (m) => ({
+        ...m,
+        streaming: false,
+        is_general_knowledge: !!data.is_general_knowledge,
+      }));
+      finishStream();
+    },
+    onError: (message) => {
+      updateMessage(tracker.get(), msgId, (m) => ({
+        ...m,
+        streaming: false,
+        error: true,
+        errorMessage: message,
+      }));
+      finishStream();
+    },
+  });
+
   const runStream = (
     convId: string,
     msgId: string,
-    question: string,
+    content: string,
     conversationIdForRequest: string | null,
   ) => {
     const controller = new AbortController();
     activeStreamRef.current = { convId, msgId, controller };
     setStreamingMsgId(msgId);
+    const tracker = makeConvIdTracker(convId);
 
     streamChat(
-      { conversation_id: conversationIdForRequest, question },
-      {
-        onToken: (text) =>
-          updateMessage(convId, msgId, (m) => ({ ...m, content: m.content + text })),
-        onCitations: (citations) => updateMessage(convId, msgId, (m) => ({ ...m, citations })),
-        onDone: (data: ChatDoneData) => {
-          const resolvedConvId = data.conversation_id || convId;
-          if (resolvedConvId !== convId) {
-            setConversations((prev) =>
-              prev.map((c) => (c.id === convId ? { ...c, id: resolvedConvId } : c)),
-            );
-            setActiveId((prevActive) => (prevActive === convId ? resolvedConvId : prevActive));
-          }
-          updateMessage(resolvedConvId, msgId, (m) => ({
-            ...m,
-            streaming: false,
-            is_general_knowledge: !!data.is_general_knowledge,
-          }));
-          finishStream();
-        },
-        onError: (message) => {
-          updateMessage(convId, msgId, (m) => ({
-            ...m,
-            streaming: false,
-            error: true,
-            errorMessage: message,
-          }));
-          finishStream();
-        },
-      },
+      { conversation_id: conversationIdForRequest, content },
+      buildStreamHandlers(msgId, tracker),
       controller.signal,
     ).catch(() => {
       if (controller.signal.aborted) return;
-      updateMessage(convId, msgId, (m) => ({
+      updateMessage(tracker.get(), msgId, (m) => ({
+        ...m,
+        streaming: false,
+        error: true,
+        errorMessage: "Could not reach the server. Check your connection and try again.",
+      }));
+      finishStream();
+    });
+  };
+
+  const runRegenerateStream = (convId: string, msgId: string, serverMessageId: string) => {
+    const controller = new AbortController();
+    activeStreamRef.current = { convId, msgId, controller };
+    setStreamingMsgId(msgId);
+    const tracker = makeConvIdTracker(convId);
+
+    regenerateChat(
+      serverMessageId,
+      buildStreamHandlers(msgId, tracker),
+      controller.signal,
+    ).catch(() => {
+      if (controller.signal.aborted) return;
+      updateMessage(tracker.get(), msgId, (m) => ({
         ...m,
         streaming: false,
         error: true,
@@ -349,6 +405,7 @@ export default function Screen() {
   const stopStream = () => {
     const s = activeStreamRef.current;
     if (!s) return;
+    stopSpeech();
     s.controller.abort();
     updateMessage(s.convId, s.msgId, (m) => ({
       ...m,
@@ -365,12 +422,8 @@ export default function Screen() {
     if (activeStreamRef.current) return;
     const conv = conversations.find((c) => c.id === convId);
     if (!conv) return;
-    const idx = conv.messages.findIndex((m) => m.id === msgId);
-    const question = conv.messages
-      .slice(0, idx)
-      .reverse()
-      .find((m) => m.role === "user");
-    if (!question) return;
+    const msg = conv.messages.find((m) => m.id === msgId);
+    if (!msg) return;
     stopSpeech();
     updateMessage(convId, msgId, (m) => ({
       ...m,
@@ -382,6 +435,19 @@ export default function Screen() {
       is_general_knowledge: false,
       streaming: true,
     }));
+    if (msg.serverId) {
+      runRegenerateStream(convId, msgId, msg.serverId);
+      return;
+    }
+    // No backend message id yet -- the original ask never reached
+    // `message.start` (e.g. it failed before the connection opened). Fall
+    // back to resending the original question as a fresh ask.
+    const idx = conv.messages.findIndex((m) => m.id === msgId);
+    const question = conv.messages
+      .slice(0, idx)
+      .reverse()
+      .find((m) => m.role === "user");
+    if (!question) return;
     runStream(convId, msgId, question.content, convId);
   };
 

@@ -208,10 +208,6 @@ async def _chat_event_stream(
         session.close()
 
 
-async def _stub_event_stream() -> AsyncIterator[str]:
-    yield format_event("stub", {})
-
-
 @router.post("")
 async def ask(
     payload: ChatRequest,
@@ -257,5 +253,70 @@ async def ask(
 
 
 @router.post("/{message_id}/regenerate")
-async def regenerate(message_id: str) -> StreamingResponse:
-    return StreamingResponse(_stub_event_stream(), media_type="text/event-stream")
+async def regenerate(
+    message_id: str,
+    db: DbSessionDep,
+    user: CurrentUserDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    client: Annotated[GeminiClient, Depends(get_gemini_client)],
+) -> StreamingResponse:
+    """Re-asks the question behind a prior assistant answer (AC-055, AC-057).
+
+    Reuses `_chat_event_stream` unchanged: the old assistant message (and,
+    via its cascading relationship, its citation rows) is deleted and its id
+    is handed back in to `_chat_event_stream`, so the replacement is
+    persisted under the *same* message id -- no duplicate assistant message
+    is ever left in the thread. `load_recent_messages` then naturally
+    excludes both the regenerated answer (already deleted) and the question
+    being re-asked (passed separately), exactly mirroring the history `ask`
+    would have built for that same turn.
+    """
+    try:
+        msg_uuid = uuid.UUID(message_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_CONVERSATION_NOT_FOUND_ERROR
+        ) from exc
+
+    assistant_message = db.get(Message, msg_uuid)
+    if assistant_message is None or assistant_message.role != "assistant":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_CONVERSATION_NOT_FOUND_ERROR
+        )
+
+    conversation = db.get(Conversation, assistant_message.conversation_id)
+    if conversation is None or conversation.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_CONVERSATION_NOT_FOUND_ERROR
+        )
+
+    prior_user_message = (
+        db.query(Message)
+        .filter(Message.conversation_id == conversation.id)
+        .filter(Message.role == "user")
+        .filter(Message.created_at <= assistant_message.created_at)
+        .order_by(Message.created_at.desc())
+        .first()
+    )
+    if prior_user_message is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_CONVERSATION_NOT_FOUND_ERROR
+        )
+
+    assistant_message_id = assistant_message.id
+    db.delete(assistant_message)
+    db.commit()
+
+    history = await asyncio.to_thread(
+        load_recent_messages, db, conversation.id, prior_user_message.id
+    )
+
+    generator = _chat_event_stream(
+        conversation_id=conversation.id,
+        assistant_message_id=assistant_message_id,
+        question=prior_user_message.content,
+        history=history,
+        settings=settings,
+        client=client,
+    )
+    return StreamingResponse(generator, media_type="text/event-stream")
