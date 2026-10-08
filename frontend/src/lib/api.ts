@@ -263,6 +263,7 @@ export interface ChatStartData {
 
 export interface ChatEndData {
   message_id?: string;
+  conversation_id?: string;
   is_general_knowledge?: boolean;
 }
 
@@ -291,9 +292,29 @@ function parseSseFrame(frame: string): { event: string; data: string } | null {
   return { event, data: dataLines.join("\n") };
 }
 
+function toCitation(raw: Record<string, unknown>): Citation {
+  return {
+    chip_number: typeof raw.chip_number === "number" ? raw.chip_number : 0,
+    document_id: typeof raw.document_id === "string" ? raw.document_id : "",
+    excerpt: typeof raw.excerpt === "string" ? raw.excerpt : "",
+    document_filename:
+      typeof raw.document_filename === "string" ? raw.document_filename : undefined,
+    document_file_type:
+      typeof raw.document_file_type === "string" ? raw.document_file_type : undefined,
+    document_size_bytes:
+      typeof raw.document_size_bytes === "number" ? raw.document_size_bytes : undefined,
+    document_uploaded_by:
+      typeof raw.document_uploaded_by === "string" ? raw.document_uploaded_by : undefined,
+    document_uploaded_at:
+      typeof raw.document_uploaded_at === "string" ? raw.document_uploaded_at : undefined,
+  };
+}
+
 /** Maps the backend's own SSE event names -- `message.start`, `token`,
  * `citation` (one per source, not a batch), `message.end` and `error` --
- * onto the typed handlers above. */
+ * onto the typed handlers above. Also tolerates the batched/aliased event
+ * names (`citations`, `done`, `error.detail`) some stream producers use, so
+ * either shape of the same contract works without the caller caring which. */
 function dispatchChatFrame(event: string, data: string, handlers: ChatStreamHandlers): void {
   try {
     const parsed = JSON.parse(data) as Record<string, unknown>;
@@ -306,21 +327,25 @@ function dispatchChatFrame(event: string, data: string, handlers: ChatStreamHand
     } else if (event === "token" && typeof parsed.text === "string") {
       handlers.onToken?.(parsed.text);
     } else if (event === "citation") {
-      handlers.onCitation?.({
-        chip_number: typeof parsed.chip_number === "number" ? parsed.chip_number : 0,
-        document_id: typeof parsed.document_id === "string" ? parsed.document_id : "",
-        excerpt: typeof parsed.excerpt === "string" ? parsed.excerpt : "",
-      });
-    } else if (event === "message.end") {
+      handlers.onCitation?.(toCitation(parsed));
+    } else if (event === "citations" && Array.isArray(parsed.citations)) {
+      for (const raw of parsed.citations as unknown[]) {
+        if (raw && typeof raw === "object") handlers.onCitation?.(toCitation(raw as Record<string, unknown>));
+      }
+    } else if (event === "message.end" || event === "done") {
       handlers.onEnd?.({
         message_id: typeof parsed.message_id === "string" ? parsed.message_id : undefined,
+        conversation_id:
+          typeof parsed.conversation_id === "string" ? parsed.conversation_id : undefined,
         is_general_knowledge: !!parsed.is_general_knowledge,
       });
     } else if (event === "error") {
       const message =
         typeof parsed.message === "string"
           ? parsed.message
-          : "Something went wrong while generating this answer.";
+          : typeof parsed.detail === "string"
+            ? parsed.detail
+            : "Something went wrong while generating this answer.";
       handlers.onError?.(message);
     }
   } catch {

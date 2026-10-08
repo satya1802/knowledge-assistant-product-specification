@@ -284,6 +284,7 @@ export default function Screen() {
         citations: [...(m.citations || []), citation],
       })),
     onEnd: (data: ChatEndData) => {
+      if (data.conversation_id) tracker.set(data.conversation_id);
       updateMessage(tracker.get(), msgId, (m) => ({
         ...m,
         streaming: false,
@@ -335,20 +336,18 @@ export default function Screen() {
     setStreamingMsgId(msgId);
     const tracker = makeConvIdTracker(convId);
 
-    regenerateChat(
-      serverMessageId,
-      buildStreamHandlers(msgId, tracker),
-      controller.signal,
-    ).catch(() => {
-      if (controller.signal.aborted) return;
-      updateMessage(tracker.get(), msgId, (m) => ({
-        ...m,
-        streaming: false,
-        error: true,
-        errorMessage: "Could not reach the server. Check your connection and try again.",
-      }));
-      finishStream();
-    });
+    regenerateChat(serverMessageId, buildStreamHandlers(msgId, tracker), controller.signal).catch(
+      () => {
+        if (controller.signal.aborted) return;
+        updateMessage(tracker.get(), msgId, (m) => ({
+          ...m,
+          streaming: false,
+          error: true,
+          errorMessage: "Could not reach the server. Check your connection and try again.",
+        }));
+        finishStream();
+      },
+    );
   };
 
   /* ---------- actions ---------- */
