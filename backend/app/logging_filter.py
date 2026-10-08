@@ -38,9 +38,7 @@ class SecretRedactingFilter(logging.Filter):
         record.msg = self._redact(record.msg, secrets)
         if record.args:
             if isinstance(record.args, dict):
-                record.args = {
-                    k: self._redact(v, secrets) for k, v in record.args.items()
-                }
+                record.args = {k: self._redact(v, secrets) for k, v in record.args.items()}
             else:
                 record.args = tuple(self._redact(a, secrets) for a in record.args)
 
