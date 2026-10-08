@@ -5,6 +5,7 @@ import { Icons } from "@/lib/icons";
 import { brand } from "@/lib/brand";
 import { useNavigate } from "@/lib/navigate";
 import { useTheme } from "@/lib/theme";
+import { useAuth } from "@/lib/auth";
 import {
   ApiError,
   deleteConversation,
@@ -76,12 +77,7 @@ const PALETTES = {
   },
 };
 
-const CURRENT_USER = {
-  name: "Satya Ganaraju",
-  first_name: "Satya",
-  email: "satya.ganaraju@quorq.ai",
-  initials: "SG",
-};
+const SIDEBAR_STORAGE_KEY = "ka-chat-sidebar-open";
 
 const SUGGESTIONS = [
   { title: "Remote work", text: "What is our remote work policy for contractors?" },
@@ -119,12 +115,34 @@ export default function Screen() {
 
   const { theme, setTheme, resolvedTheme } = useTheme();
   const t = PALETTES[resolvedTheme];
+  const { user, logout } = useAuth();
+  const currentUserName = user?.name || "…";
+  const currentUserFirstName = user?.name ? user.name.split(" ")[0] : "there";
+  const currentUserEmail = user?.email || "";
+  const currentUserInitials = user?.name
+    ? user.name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((p) => p[0]?.toUpperCase())
+        .join("")
+    : "?";
 
   const [conversations, setConversations] = React.useState<Conversation[]>([]);
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [chatQuery, setChatQuery] = React.useState("");
   const [input, setInput] = React.useState("");
-  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [sidebarOpen, setSidebarOpen] = React.useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      const raw = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+      if (raw === "true") return true;
+      if (raw === "false") return false;
+    } catch {
+      // localStorage unavailable -- default to expanded.
+    }
+    return true;
+  });
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [streamingMsgId, setStreamingMsgId] = React.useState<string | null>(null);
   const [panel, setPanel] = React.useState<{ citation: Citation } | null>(null);
@@ -194,6 +212,21 @@ export default function Screen() {
   React.useEffect(() => {
     chatQueryRef.current = chatQuery;
   }, [chatQuery]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarOpen));
+    } catch {
+      // localStorage unavailable -- the choice still applies for this session.
+    }
+  }, [sidebarOpen]);
+
+  // Auto-focus the composer whenever the welcome screen is showing (initial
+  // load and after "New chat"), per AC-077.
+  React.useEffect(() => {
+    if (!activeId && textareaRef.current) textareaRef.current.focus();
+  }, [activeId]);
 
   const mergeSummaries = React.useCallback(
     (prev: Conversation[], summaries: ConversationSummary[]): Conversation[] => {
@@ -1092,13 +1125,13 @@ export default function Screen() {
               className="h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-xs font-semibold"
               style={{ backgroundColor: t.raised, color: t.text, border: "1px solid " + t.border }}
             >
-              {CURRENT_USER.initials}
+              {currentUserInitials}
             </span>
             {sidebarOpen && (
               <span className="min-w-0 flex-1 text-left">
-                <span className="block text-sm truncate">{CURRENT_USER.name}</span>
+                <span className="block text-sm truncate">{currentUserName}</span>
                 <span className="block text-[11px] truncate" style={{ color: t.subtext }}>
-                  {CURRENT_USER.email}
+                  {currentUserEmail}
                 </span>
               </span>
             )}
@@ -1119,9 +1152,9 @@ export default function Screen() {
               style={{ backgroundColor: t.panel, border: "1px solid " + t.border }}
             >
               <div className="px-2 py-2">
-                <p className="text-sm font-medium truncate">{CURRENT_USER.name}</p>
+                <p className="text-sm font-medium truncate">{currentUserName}</p>
                 <p className="text-[11px] truncate" style={{ color: t.subtext }}>
-                  {CURRENT_USER.email}
+                  {currentUserEmail}
                 </p>
               </div>
               <div className="h-px my-1" style={{ backgroundColor: t.border }} />
@@ -1175,7 +1208,7 @@ export default function Screen() {
                 onClick={() => {
                   setMenuOpen(false);
                   stopSpeech();
-                  navigate("sign-in");
+                  logout();
                 }}
                 className={"w-full text-left text-sm px-2 py-2 rounded-md " + focusRing}
                 style={fx({ color: t.text })}
@@ -1234,7 +1267,7 @@ export default function Screen() {
                       <div className="flex justify-end">
                         <div className="max-w-[85%]">
                           <p className="text-[11px] mb-1 text-right" style={{ color: t.faint }}>
-                            {CURRENT_USER.first_name} · {timeOf(m.created_at)}
+                            {currentUserFirstName} · {timeOf(m.created_at)}
                           </p>
                           <p
                             className="text-[15px] leading-7 rounded-2xl px-4 py-3"
@@ -1272,7 +1305,7 @@ export default function Screen() {
                     color: "transparent",
                   }}
                 >
-                  Hello, {CURRENT_USER.first_name}
+                  Hello, {currentUserFirstName}
                 </span>
                 <span style={{ color: t.subtext }}> — How can I help you today?</span>
               </h1>

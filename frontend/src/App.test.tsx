@@ -23,14 +23,15 @@ describe("App", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders without crashing and shows the first screen's nav link", async () => {
+  it("renders without crashing and shows the sign-in screen with no prototype nav rail", async () => {
     render(
       <MemoryRouter>
         <App />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
     await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.getByRole("tab", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Chat" })).not.toBeInTheDocument();
   });
 
   it("redirects protected routes to sign-in with no session", async () => {

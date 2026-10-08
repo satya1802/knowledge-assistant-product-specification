@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -82,6 +82,7 @@ async function renderChat(chatFrames: () => string[], handlers: Record<string, u
 describe("Chat", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
   it("AC-038: appends the question immediately and streams assistant tokens from the SSE response", async () => {
@@ -195,5 +196,65 @@ describe("Chat", () => {
     await userEvent.keyboard("{Enter}");
     expect(screen.queryByText(/Hello, Satya/)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: /./ })).toBeInTheDocument();
+  });
+
+  it("AC-071: the account menu shows the signed-in user's real name and email, not a seeded constant", async () => {
+    await renderChat(() => []);
+
+    await userEvent.click(screen.getByRole("button", { name: /Account menu|Satya Ganaraju/ }));
+
+    const menu = screen.getByRole("menu", { name: "Account" });
+    expect(within(menu).getByText("Satya Ganaraju")).toBeInTheDocument();
+    expect(within(menu).getByText("satya.ganaraju@quorq.ai")).toBeInTheDocument();
+  });
+
+  it("AC-074: Sign out calls POST /api/auth/logout rather than merely navigating", async () => {
+    const fetchMock = await renderChat(() => [], {
+      "/api/auth/logout": { status: 204, body: null },
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Account menu|Satya Ganaraju/ }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          (call) => String(call[0]).includes("/api/auth/logout") && call[1]?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it("AC-072: the collapse control persists its state under its own localStorage key, restored next visit", async () => {
+    window.localStorage.clear();
+    await renderChat(() => []);
+
+    await userEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(window.localStorage.getItem("ka-chat-sidebar-open")).toBe("false");
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+
+    // Simulate a fresh visit in the same browser: unmount, then remount.
+    cleanup();
+    await renderChat(() => []);
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+  });
+
+  it("AC-073: New chat shows the welcome screen and keeps the previous conversation in history", async () => {
+    await renderChat(() => [
+      frame("token", { text: "An answer." }),
+      frame("done", { conversation_id: "c-server-3", is_general_knowledge: false }),
+    ]);
+
+    await userEvent.type(screen.getByLabelText("Your question"), "What is the remote work policy?");
+    await userEvent.click(screen.getByRole("button", { name: /^Send$/ }));
+    await waitFor(() => expect(screen.getByText("An answer.")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: "New chat" }));
+
+    await waitFor(() => expect(screen.getByText(/Hello, Satya/)).toBeInTheDocument());
+    const historyList = screen.getByRole("list", { name: "Today" });
+    expect(
+      within(historyList).getByText("What is the remote work policy?"),
+    ).toBeInTheDocument();
   });
 });
