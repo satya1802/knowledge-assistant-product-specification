@@ -77,8 +77,7 @@ def _build_prompt(question: str, chunks: list[DocumentChunk], history_text: str 
     history_block = f"Conversation so far:\n{history_text}\n\n" if history_text else ""
     if not chunks:
         return (
-            history_block
-            + "You are a helpful enterprise assistant. No relevant internal "
+            history_block + "You are a helpful enterprise assistant. No relevant internal "
             "documents were found for this question, so answer it from general "
             "knowledge and make clear that the answer is not sourced from the "
             "knowledge base.\n\n"
@@ -86,8 +85,7 @@ def _build_prompt(question: str, chunks: list[DocumentChunk], history_text: str 
         )
     context = "\n\n".join(f"[{i}] {chunk.content}" for i, chunk in enumerate(chunks, start=1))
     return (
-        history_block
-        + "You are a helpful enterprise assistant. Answer the question using only "
+        history_block + "You are a helpful enterprise assistant. Answer the question using only "
         "the numbered context below, citing sources inline like [1]. If the "
         "context does not contain the answer, say so plainly.\n\n"
         f"Context:\n{context}\n\nQuestion: {question}"
