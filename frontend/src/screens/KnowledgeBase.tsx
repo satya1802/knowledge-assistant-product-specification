@@ -5,6 +5,7 @@ import { Icons } from "@/lib/icons";
 import { brand } from "@/lib/brand";
 import { useNavigate } from "@/lib/navigate";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 import {
   deleteDocument,
   downloadDocument,
@@ -16,22 +17,49 @@ import {
 
 const { Label } = UI;
 
-const C = {
-  bg: "#101418",
-  surface: "#161B21",
-  surfaceAlt: "#1B222A",
-  border: "#262F39",
-  borderSoft: "#1F262E",
-  text: "#E8EDF3",
-  muted: "#8A95A1",
-  primary: "#5B9CF8",
-  accent: "#F4A259",
-  ok: "#6FCF97",
-  fail: "#F2777A",
+/** Palettes tuned so every status/accent colour clears 4.5:1 against its own
+ * background in both themes (WCAG 2.1 AA for normal text) -- the dark
+ * values are the product's existing near-black surface; the light values
+ * mirror the darker, AA-safe tones already used on SignIn/Account rather
+ * than the lighter brand hues, which fail contrast on a white surface. */
+const PALETTES = {
+  dark: {
+    bg: "#101418",
+    surface: "#161B21",
+    surfaceAlt: "#1B222A",
+    border: "#262F39",
+    borderSoft: "#1F262E",
+    text: "#E8EDF3",
+    muted: "#8A95A1",
+    primary: "#5B9CF8",
+    onPrimary: "#0C1117",
+    accent: "#F4A259",
+    ok: "#6FCF97",
+    fail: "#F2777A",
+    failBg: "rgba(242,119,122,0.08)",
+    failBorder: "rgba(242,119,122,0.4)",
+    overlay: "rgba(8,11,14,0.75)",
+  },
+  light: {
+    bg: "#F5F8FB",
+    surface: "#FFFFFF",
+    surfaceAlt: "#EEF3F8",
+    border: "#D8E0E8",
+    borderSoft: "#E4EAF0",
+    text: "#131920",
+    muted: "#4E5A66",
+    primary: "#5B9CF8",
+    onPrimary: "#0C1117",
+    accent: "#8A5213",
+    ok: "#1F7A4D",
+    fail: "#B23A2C",
+    failBg: "rgba(178,58,44,0.08)",
+    failBorder: "rgba(178,58,44,0.4)",
+    overlay: "rgba(16,20,24,0.45)",
+  },
 };
 
-const FOCUS =
-  "focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900";
+type Palette = typeof PALETTES.dark;
 
 const ALLOWED_TYPES: Record<string, string> = {
   pdf: "PDF",
@@ -41,12 +69,6 @@ const ALLOWED_TYPES: Record<string, string> = {
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-const STATUS_META: Record<string, { label: string; color: string; icon: string }> = {
-  ready: { label: "Ready", color: C.ok, icon: "CheckCircle" },
-  processing: { label: "Processing", color: C.accent, icon: "Clock" },
-  failed: { label: "Failed", color: C.fail, icon: "AlertCircle" },
-};
 
 interface UiDocument extends DocumentRecord {
   _uploading?: boolean;
@@ -77,37 +99,44 @@ function StatCard({
   value,
   tone,
   hint,
+  t,
 }: {
   label: string;
   value: number;
   tone?: string;
   hint: string;
+  t: Palette;
 }) {
   return (
     <div
       className="rounded-lg border px-5 py-4"
-      style={{ backgroundColor: C.surface, borderColor: C.border, borderRadius: brand.radius }}
+      style={{ backgroundColor: t.surface, borderColor: t.border, borderRadius: brand.radius }}
     >
-      <p className="text-xs font-medium uppercase tracking-wider" style={{ color: C.muted }}>
+      <p className="text-xs font-medium uppercase tracking-wider" style={{ color: t.muted }}>
         {label}
       </p>
-      <p className="mt-2 text-3xl font-semibold tabular-nums" style={{ color: tone || C.text }}>
+      <p className="mt-2 text-3xl font-semibold tabular-nums" style={{ color: tone || t.text }}>
         {value}
       </p>
-      <p className="mt-1 text-xs" style={{ color: C.muted }}>
+      <p className="mt-1 text-xs" style={{ color: t.muted }}>
         {hint}
       </p>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const meta = STATUS_META[status] || STATUS_META.processing;
+function StatusBadge({ status, t }: { status: string; t: Palette }) {
+  const meta =
+    status === "ready"
+      ? { label: "Ready", color: t.ok, icon: "CheckCircle" }
+      : status === "failed"
+        ? { label: "Failed", color: t.fail, icon: "AlertCircle" }
+        : { label: "Processing", color: t.accent, icon: "Clock" };
   const Icon = Icons[meta.icon] || Icons.CheckCircle;
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-      style={{ color: meta.color, backgroundColor: "rgba(255,255,255,0.05)" }}
+      style={{ color: meta.color, backgroundColor: t.surfaceAlt }}
     >
       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
       {meta.label}
@@ -118,6 +147,14 @@ function StatusBadge({ status }: { status: string }) {
 export default function Screen() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const t: Palette = resolvedTheme === "light" ? PALETTES.light : PALETTES.dark;
+
+  const focusRing =
+    "outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
+  const fx = (extra?: React.CSSProperties) =>
+    Object.assign({ outlineColor: brand.primaryColor }, extra || {});
+
   const [documents, setDocuments] = React.useState<UiDocument[]>([]);
   const [maxUploadBytes, setMaxUploadBytes] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -372,9 +409,9 @@ export default function Screen() {
   };
 
   const controlStyle = {
-    backgroundColor: C.surfaceAlt,
-    borderColor: C.border,
-    color: C.text,
+    backgroundColor: t.surfaceAlt,
+    borderColor: t.border,
+    color: t.text,
     borderRadius: brand.radius,
   };
 
@@ -383,8 +420,8 @@ export default function Screen() {
 
   return (
     <div
-      className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8"
-      style={{ color: C.text, fontFamily: brand.fontBody }}
+      className="mx-auto w-full max-w-6xl overflow-x-hidden px-5 py-8 sm:px-8"
+      style={{ backgroundColor: t.bg, color: t.text, fontFamily: brand.fontBody }}
     >
       {/* Header */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -395,7 +432,7 @@ export default function Screen() {
           >
             Knowledge base
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed" style={{ color: C.muted }}>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed" style={{ color: t.muted }}>
             One shared, company-wide library. Anyone signed in can upload a document or delete any
             document — everything here can be cited in an answer.
           </p>
@@ -405,10 +442,10 @@ export default function Screen() {
             type="button"
             onClick={() => navigate("getting-started")}
             className={
-              "rounded-md border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-white/5 " +
-              FOCUS
+              "rounded-md border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-black/5 " +
+              focusRing
             }
-            style={{ borderColor: C.border, color: C.text, borderRadius: brand.radius }}
+            style={fx({ borderColor: t.border, color: t.text, borderRadius: brand.radius })}
           >
             Getting started
           </button>
@@ -417,9 +454,9 @@ export default function Screen() {
             onClick={() => navigate("chat")}
             className={
               "inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-sm font-semibold transition-opacity hover:opacity-90 " +
-              FOCUS
+              focusRing
             }
-            style={{ backgroundColor: C.primary, color: "#0C1117", borderRadius: brand.radius }}
+            style={fx({ backgroundColor: t.primary, color: t.onPrimary, borderRadius: brand.radius })}
           >
             Ask a question
             <Icons.ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -433,15 +470,22 @@ export default function Screen() {
           Library statistics
         </h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="Total documents" value={counts.total} hint="in the shared library" />
-          <StatCard label="Ready" value={counts.ready} tone={C.ok} hint="searchable and citable" />
+          <StatCard label="Total documents" value={counts.total} hint="in the shared library" t={t} />
+          <StatCard
+            label="Ready"
+            value={counts.ready}
+            tone={t.ok}
+            hint="searchable and citable"
+            t={t}
+          />
           <StatCard
             label="Processing"
             value={counts.processing}
-            tone={C.accent}
+            tone={t.accent}
             hint="parsing, chunking, embedding"
+            t={t}
           />
-          <StatCard label="Failed" value={counts.failed} tone={C.fail} hint="needs re-upload" />
+          <StatCard label="Failed" value={counts.failed} tone={t.fail} hint="needs re-upload" t={t} />
         </div>
       </section>
 
@@ -459,20 +503,20 @@ export default function Screen() {
           onDrop={onDrop}
           className="mt-3 rounded-xl border border-dashed px-6 py-10 text-center transition-colors"
           style={{
-            borderColor: dragging ? C.accent : C.border,
-            backgroundColor: dragging ? "rgba(244,162,89,0.07)" : C.surface,
+            borderColor: dragging ? t.accent : t.border,
+            backgroundColor: dragging ? "rgba(244,162,89,0.07)" : t.surface,
             borderRadius: brand.radius,
           }}
         >
           <Icons.Upload
             className="mx-auto h-7 w-7"
-            style={{ color: C.accent }}
+            style={{ color: t.accent }}
             aria-hidden="true"
           />
           <p className="mt-3 text-sm font-medium">
             Drag files here to add them to the shared library
           </p>
-          <p className="mt-1 text-xs" style={{ color: C.muted }}>
+          <p className="mt-1 text-xs" style={{ color: t.muted }}>
             PDF, DOCX, TXT and Markdown{sizeLimitHint ? ` · ${sizeLimitHint}` : ""}
           </p>
 
@@ -491,9 +535,14 @@ export default function Screen() {
           <Label
             htmlFor="file-upload"
             className={
-              "mt-5 inline-flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 peer-focus-visible:ring-2 peer-focus-visible:ring-sky-400 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900"
+              "mt-5 inline-flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
             }
-            style={{ backgroundColor: C.primary, color: "#0C1117", borderRadius: brand.radius }}
+            style={{
+              backgroundColor: t.primary,
+              color: t.onPrimary,
+              borderRadius: brand.radius,
+              outlineColor: brand.primaryColor,
+            }}
           >
             <Icons.Plus className="h-4 w-4" aria-hidden="true" />
             Choose files
@@ -507,25 +556,25 @@ export default function Screen() {
               key={n.id}
               className="flex items-start gap-3 rounded-lg border px-4 py-3 text-sm"
               style={{
-                borderColor: n.tone === "error" ? "rgba(242,119,122,0.4)" : C.border,
-                backgroundColor: n.tone === "error" ? "rgba(242,119,122,0.08)" : C.surface,
+                borderColor: n.tone === "error" ? t.failBorder : t.border,
+                backgroundColor: n.tone === "error" ? t.failBg : t.surface,
                 borderRadius: brand.radius,
               }}
             >
               {n.tone === "error" ? (
                 <Icons.AlertCircle
                   className="mt-0.5 h-4 w-4 shrink-0"
-                  style={{ color: C.fail }}
+                  style={{ color: t.fail }}
                   aria-hidden="true"
                 />
               ) : (
                 <Icons.CheckCircle
                   className="mt-0.5 h-4 w-4 shrink-0"
-                  style={{ color: C.ok }}
+                  style={{ color: t.ok }}
                   aria-hidden="true"
                 />
               )}
-              <p className="flex-1 leading-relaxed" style={{ color: C.text }}>
+              <p className="flex-1 leading-relaxed" style={{ color: t.text }}>
                 <span className="sr-only">{n.tone === "error" ? "Error: " : "Success: "}</span>
                 {n.text}
               </p>
@@ -533,8 +582,8 @@ export default function Screen() {
                 type="button"
                 onClick={() => dismissNotice(n.id)}
                 aria-label={"Dismiss message: " + n.text}
-                className={"shrink-0 rounded p-1 hover:bg-white/10 " + FOCUS}
-                style={{ color: C.muted }}
+                className={"shrink-0 rounded p-1 hover:bg-black/10 " + focusRing}
+                style={fx({ color: t.muted })}
               >
                 <Icons.X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -549,7 +598,7 @@ export default function Screen() {
           <h2 id="documents-heading" className="text-base font-semibold">
             Documents
           </h2>
-          <p className="text-sm tabular-nums" style={{ color: C.muted }} role="status">
+          <p className="text-sm tabular-nums" style={{ color: t.muted }} role="status">
             Showing {filtered.length} of {documents.length} document
             {documents.length === 1 ? "" : "s"}
           </p>
@@ -560,14 +609,14 @@ export default function Screen() {
             <Label
               htmlFor="doc-search"
               className="mb-1.5 block text-xs font-medium"
-              style={{ color: C.muted }}
+              style={{ color: t.muted }}
             >
               Search by file name
             </Label>
             <div className="relative">
               <Icons.Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
-                style={{ color: C.muted }}
+                style={{ color: t.muted }}
                 aria-hidden="true"
               />
               <input
@@ -576,11 +625,8 @@ export default function Screen() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="e.g. policy"
-                className={
-                  "w-full rounded-md border py-2 pl-9 pr-3 text-sm placeholder:text-slate-500 " +
-                  FOCUS
-                }
-                style={controlStyle}
+                className={"w-full rounded-md border py-2 pl-9 pr-3 text-sm " + focusRing}
+                style={fx(controlStyle)}
               />
             </div>
           </div>
@@ -589,7 +635,7 @@ export default function Screen() {
             <Label
               htmlFor="status-filter"
               className="mb-1.5 block text-xs font-medium"
-              style={{ color: C.muted }}
+              style={{ color: t.muted }}
             >
               Status
             </Label>
@@ -597,8 +643,8 @@ export default function Screen() {
               id="status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className={"w-full rounded-md border px-3 py-2 text-sm " + FOCUS}
-              style={controlStyle}
+              className={"w-full rounded-md border px-3 py-2 text-sm " + focusRing}
+              style={fx(controlStyle)}
             >
               <option value="all">All statuses</option>
               <option value="ready">Ready</option>
@@ -611,7 +657,7 @@ export default function Screen() {
             <Label
               htmlFor="type-filter"
               className="mb-1.5 block text-xs font-medium"
-              style={{ color: C.muted }}
+              style={{ color: t.muted }}
             >
               File type
             </Label>
@@ -619,8 +665,8 @@ export default function Screen() {
               id="type-filter"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className={"w-full rounded-md border px-3 py-2 text-sm " + FOCUS}
-              style={controlStyle}
+              className={"w-full rounded-md border px-3 py-2 text-sm " + focusRing}
+              style={fx(controlStyle)}
             >
               <option value="all">All types</option>
               <option value="pdf">PDF</option>
@@ -637,10 +683,10 @@ export default function Screen() {
               type="button"
               onClick={clearFilters}
               className={
-                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-white/5 " +
-                FOCUS
+                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-black/5 " +
+                focusRing
               }
-              style={{ borderColor: C.border, color: C.text, borderRadius: brand.radius }}
+              style={fx({ borderColor: t.border, color: t.text, borderRadius: brand.radius })}
             >
               <Icons.X className="h-3.5 w-3.5" aria-hidden="true" />
               Clear search and filters
@@ -651,11 +697,11 @@ export default function Screen() {
         {/* Table / empty states */}
         <div
           className="mt-4 overflow-hidden rounded-xl border"
-          style={{ borderColor: C.border, backgroundColor: C.surface, borderRadius: brand.radius }}
+          style={{ borderColor: t.border, backgroundColor: t.surface, borderRadius: brand.radius }}
         >
           {loading ? (
             <div className="px-6 py-16 text-center">
-              <p className="text-sm" style={{ color: C.muted }}>
+              <p className="text-sm" style={{ color: t.muted }}>
                 Loading documents…
               </p>
             </div>
@@ -663,13 +709,13 @@ export default function Screen() {
             <div className="px-6 py-16 text-center">
               <Icons.Package
                 className="mx-auto h-8 w-8"
-                style={{ color: C.muted }}
+                style={{ color: t.muted }}
                 aria-hidden="true"
               />
               <h3 className="mt-4 text-base font-semibold">The knowledge base is empty</h3>
               <p
                 className="mx-auto mt-2 max-w-md text-sm leading-relaxed"
-                style={{ color: C.muted }}
+                style={{ color: t.muted }}
               >
                 Upload your first document and the assistant can start answering from it within
                 seconds.
@@ -679,9 +725,9 @@ export default function Screen() {
                 onClick={() => fileInputRef.current && fileInputRef.current.click()}
                 className={
                   "mt-5 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold hover:opacity-90 " +
-                  FOCUS
+                  focusRing
                 }
-                style={{ backgroundColor: C.primary, color: "#0C1117", borderRadius: brand.radius }}
+                style={fx({ backgroundColor: t.primary, color: t.onPrimary, borderRadius: brand.radius })}
               >
                 <Icons.Plus className="h-4 w-4" aria-hidden="true" />
                 Upload a document
@@ -691,13 +737,13 @@ export default function Screen() {
             <div className="px-6 py-16 text-center">
               <Icons.Search
                 className="mx-auto h-8 w-8"
-                style={{ color: C.muted }}
+                style={{ color: t.muted }}
                 aria-hidden="true"
               />
               <h3 className="mt-4 text-base font-semibold">No matching documents</h3>
               <p
                 className="mx-auto mt-2 max-w-md text-sm leading-relaxed"
-                style={{ color: C.muted }}
+                style={{ color: t.muted }}
               >
                 Nothing in the library matches{" "}
                 {query.trim() ? `“${query.trim()}”` : "these filters"}
@@ -709,10 +755,10 @@ export default function Screen() {
                 type="button"
                 onClick={clearFilters}
                 className={
-                  "mt-5 inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-white/5 " +
-                  FOCUS
+                  "mt-5 inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-black/5 " +
+                  focusRing
                 }
-                style={{ borderColor: C.border, color: C.text, borderRadius: brand.radius }}
+                style={fx({ borderColor: t.border, color: t.text, borderRadius: brand.radius })}
               >
                 <Icons.X className="h-4 w-4" aria-hidden="true" />
                 Clear search and filters
@@ -726,53 +772,53 @@ export default function Screen() {
                   actions.
                 </caption>
                 <thead>
-                  <tr style={{ backgroundColor: C.surfaceAlt }}>
+                  <tr style={{ backgroundColor: t.surfaceAlt }}>
                     <th
                       scope="col"
                       className="px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: C.muted }}
+                      style={{ color: t.muted }}
                     >
                       Document
                     </th>
                     <th
                       scope="col"
                       className="px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: C.muted }}
+                      style={{ color: t.muted }}
                     >
                       Type
                     </th>
                     <th
                       scope="col"
                       className="px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: C.muted }}
+                      style={{ color: t.muted }}
                     >
                       Size
                     </th>
                     <th
                       scope="col"
                       className="px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: C.muted }}
+                      style={{ color: t.muted }}
                     >
                       Status
                     </th>
                     <th
                       scope="col"
                       className="px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: C.muted }}
+                      style={{ color: t.muted }}
                     >
                       Uploaded by
                     </th>
                     <th
                       scope="col"
                       className="px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: C.muted }}
+                      style={{ color: t.muted }}
                     >
                       Uploaded
                     </th>
                     <th
                       scope="col"
                       className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: C.muted }}
+                      style={{ color: t.muted }}
                     >
                       Actions
                     </th>
@@ -783,36 +829,36 @@ export default function Screen() {
                     <tr
                       key={doc.id}
                       className="border-t align-top"
-                      style={{ borderColor: C.borderSoft }}
+                      style={{ borderColor: t.borderSoft }}
                     >
                       <th scope="row" className="max-w-xs px-5 py-4 text-left font-medium">
                         <span className="flex items-start gap-2.5">
                           <Icons.FileText
                             className="mt-0.5 h-4 w-4 shrink-0"
-                            style={{ color: C.muted }}
+                            style={{ color: t.muted }}
                             aria-hidden="true"
                           />
-                          <span className="break-words" style={{ color: C.text }}>
+                          <span className="break-words" style={{ color: t.text }}>
                             {doc.filename}
                             {user && doc.uploaded_by === user.name && (
-                              <span className="ml-2 text-xs font-normal" style={{ color: C.muted }}>
+                              <span className="ml-2 text-xs font-normal" style={{ color: t.muted }}>
                                 · yours
                               </span>
                             )}
                           </span>
                         </span>
                       </th>
-                      <td className="whitespace-nowrap px-5 py-4" style={{ color: C.muted }}>
+                      <td className="whitespace-nowrap px-5 py-4" style={{ color: t.muted }}>
                         {ALLOWED_TYPES[doc.file_type] || doc.file_type.toUpperCase()}
                       </td>
                       <td
                         className="whitespace-nowrap px-5 py-4 tabular-nums"
-                        style={{ color: C.muted }}
+                        style={{ color: t.muted }}
                       >
                         {formatSize(doc.size_bytes)}
                       </td>
                       <td className="px-5 py-4">
-                        <StatusBadge status={doc.status} />
+                        <StatusBadge status={doc.status} t={t} />
                         {doc._uploading && (
                           <div className="mt-2 w-32">
                             <div
@@ -822,17 +868,17 @@ export default function Screen() {
                               aria-valuemax={100}
                               aria-label={"Upload progress for " + doc.filename}
                               className="h-1.5 w-full overflow-hidden rounded-full"
-                              style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+                              style={{ backgroundColor: t.surfaceAlt }}
                             >
                               <div
                                 className="h-full rounded-full transition-all"
                                 style={{
                                   width: (doc._progress || 0) + "%",
-                                  backgroundColor: C.primary,
+                                  backgroundColor: t.primary,
                                 }}
                               />
                             </div>
-                            <p className="mt-1 text-xs tabular-nums" style={{ color: C.muted }}>
+                            <p className="mt-1 text-xs tabular-nums" style={{ color: t.muted }}>
                               {doc._progress || 0}% uploaded
                             </p>
                           </div>
@@ -840,7 +886,7 @@ export default function Screen() {
                         {!doc._uploading && doc.status === "processing" && (
                           <p
                             className="mt-1.5 max-w-[14rem] text-xs leading-relaxed"
-                            style={{ color: C.muted }}
+                            style={{ color: t.muted }}
                           >
                             Extracting text, chunking and embedding…
                           </p>
@@ -848,21 +894,21 @@ export default function Screen() {
                         {doc.status === "failed" && doc.failure_reason && (
                           <p
                             className="mt-1.5 max-w-[14rem] text-xs leading-relaxed"
-                            style={{ color: C.fail }}
+                            style={{ color: t.fail }}
                           >
                             {doc.failure_reason}
                           </p>
                         )}
                         {doc.status === "ready" && doc.chunk_count ? (
-                          <p className="mt-1.5 text-xs tabular-nums" style={{ color: C.muted }}>
+                          <p className="mt-1.5 text-xs tabular-nums" style={{ color: t.muted }}>
                             {doc.chunk_count} chunks indexed
                           </p>
                         ) : null}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-4" style={{ color: C.muted }}>
+                      <td className="whitespace-nowrap px-5 py-4" style={{ color: t.muted }}>
                         {doc.uploaded_by}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-4" style={{ color: C.muted }}>
+                      <td className="whitespace-nowrap px-5 py-4" style={{ color: t.muted }}>
                         {formatDate(doc.uploaded_at)}
                       </td>
                       <td className="px-5 py-4">
@@ -873,14 +919,14 @@ export default function Screen() {
                             onClick={() => handleDownload(doc)}
                             aria-label={"Download " + doc.filename}
                             className={
-                              "rounded-md border p-2 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 " +
-                              FOCUS
+                              "rounded-md border p-2 transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40 " +
+                              focusRing
                             }
-                            style={{
-                              borderColor: C.border,
-                              color: C.text,
+                            style={fx({
+                              borderColor: t.border,
+                              color: t.text,
                               borderRadius: brand.radius,
-                            }}
+                            })}
                           >
                             <Icons.Download className="h-4 w-4" aria-hidden="true" />
                           </button>
@@ -890,14 +936,14 @@ export default function Screen() {
                             onClick={(e) => openConfirm(doc, e)}
                             aria-label={"Delete " + doc.filename}
                             className={
-                              "rounded-md border p-2 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 " +
-                              FOCUS
+                              "rounded-md border p-2 transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40 " +
+                              focusRing
                             }
-                            style={{
-                              borderColor: C.border,
-                              color: C.fail,
+                            style={fx({
+                              borderColor: t.border,
+                              color: t.fail,
                               borderRadius: brand.radius,
-                            }}
+                            })}
                           >
                             <Icons.Trash className="h-4 w-4" aria-hidden="true" />
                           </button>
@@ -911,7 +957,7 @@ export default function Screen() {
           )}
         </div>
 
-        <p className="mt-3 text-xs leading-relaxed" style={{ color: C.muted }}>
+        <p className="mt-3 text-xs leading-relaxed" style={{ color: t.muted }}>
           Deletion is permanent — the stored file, its chunks and its embeddings are removed, and
           the document stops being cited in new answers. There is no recycle bin.
         </p>
@@ -921,7 +967,7 @@ export default function Screen() {
       {confirmDoc && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: "rgba(8,11,14,0.75)" }}
+          style={{ backgroundColor: t.overlay }}
         >
           <div
             ref={dialogRef}
@@ -932,8 +978,8 @@ export default function Screen() {
             onKeyDown={onDialogKeyDown}
             className="w-full max-w-md rounded-xl border p-6 shadow-2xl"
             style={{
-              backgroundColor: C.surface,
-              borderColor: C.border,
+              backgroundColor: t.surface,
+              borderColor: t.border,
               borderRadius: brand.radius,
             }}
           >
@@ -944,7 +990,7 @@ export default function Screen() {
             >
               Delete this document?
             </h2>
-            <p id="delete-desc" className="mt-3 text-sm leading-relaxed" style={{ color: C.muted }}>
+            <p id="delete-desc" className="mt-3 text-sm leading-relaxed" style={{ color: t.muted }}>
               “{confirmDoc.filename}” was uploaded by {confirmDoc.uploaded_by} on{" "}
               {formatDate(confirmDoc.uploaded_at)}. Deleting it removes the original file and every
               chunk and embedding derived from it, for everyone. This cannot be undone.
@@ -955,9 +1001,9 @@ export default function Screen() {
                 type="button"
                 onClick={closeConfirm}
                 className={
-                  "rounded-md border px-4 py-2 text-sm font-medium hover:bg-white/5 " + FOCUS
+                  "rounded-md border px-4 py-2 text-sm font-medium hover:bg-black/5 " + focusRing
                 }
-                style={{ borderColor: C.border, color: C.text, borderRadius: brand.radius }}
+                style={fx({ borderColor: t.border, color: t.text, borderRadius: brand.radius })}
               >
                 Cancel
               </button>
@@ -967,9 +1013,9 @@ export default function Screen() {
                 onClick={performDelete}
                 className={
                   "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold hover:opacity-90 " +
-                  FOCUS
+                  focusRing
                 }
-                style={{ backgroundColor: C.fail, color: "#1A0F10", borderRadius: brand.radius }}
+                style={fx({ backgroundColor: "#C43F36", color: "#FFFFFF", borderRadius: brand.radius })}
               >
                 <Icons.Trash className="h-4 w-4" aria-hidden="true" />
                 Delete permanently

@@ -53,7 +53,7 @@ const PALETTES = {
     border: "#252D36",
     text: "#E8EDF3",
     subtext: "#8A95A1",
-    faint: "#6B7682",
+    faint: "#7B8794",
     accentText: "#F4A259",
     accentBg: "rgba(244,162,89,0.12)",
     accentBorder: "rgba(244,162,89,0.45)",
@@ -68,7 +68,7 @@ const PALETTES = {
     border: "#D6DFEA",
     text: "#121920",
     subtext: "#56616E",
-    faint: "#6B7682",
+    faint: "#636E7A",
     accentText: "#8A4A05",
     accentBg: "rgba(244,162,89,0.18)",
     accentBorder: "rgba(138,74,5,0.45)",
@@ -162,6 +162,8 @@ export default function Screen() {
   const menuRef = React.useRef<HTMLDivElement | null>(null);
   const searchRef = React.useRef<HTMLInputElement | null>(null);
   const cancelRef = React.useRef<HTMLButtonElement | null>(null);
+  const confirmDeleteRef = React.useRef<HTMLButtonElement | null>(null);
+  const deleteTriggerRef = React.useRef<HTMLElement | null>(null);
   const activeStreamRef = React.useRef<{
     convId: string;
     msgId: string;
@@ -273,13 +275,15 @@ export default function Screen() {
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (pendingDelete) setPendingDelete(null);
+      if (pendingDelete) closeDeleteDialog();
       else if (menuOpen) setMenuOpen(false);
       else if (panel) setPanel(null);
+      else if (sidebarOpen && typeof window !== "undefined" && window.innerWidth < 768)
+        setSidebarOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pendingDelete, menuOpen, panel]);
+  }, [pendingDelete, menuOpen, panel, sidebarOpen]);
 
   React.useEffect(() => {
     if (!menuOpen) return undefined;
@@ -594,9 +598,30 @@ export default function Screen() {
     }, 0);
   };
 
+  const closeDeleteDialog = () => {
+    setPendingDelete(null);
+    const trigger = deleteTriggerRef.current;
+    deleteTriggerRef.current = null;
+    if (trigger) window.setTimeout(() => trigger.focus(), 0);
+  };
+
+  const onDeleteDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const first = cancelRef.current;
+    const last = confirmDeleteRef.current;
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   const confirmDelete = () => {
     const id = pendingDelete;
-    setPendingDelete(null);
+    closeDeleteDialog();
     if (!id) return;
     if (activeStreamRef.current && activeStreamRef.current.convId === id) {
       activeStreamRef.current.controller.abort();
@@ -1076,7 +1101,10 @@ export default function Screen() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => setPendingDelete(c.id)}
+                              onClick={(e) => {
+                                deleteTriggerRef.current = e.currentTarget;
+                                setPendingDelete(c.id);
+                              }}
                               aria-label={"Delete conversation " + c.title}
                               className={
                                 "absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 " +
@@ -1246,7 +1274,10 @@ export default function Screen() {
               </div>
               <button
                 type="button"
-                onClick={() => setPendingDelete(activeConv.id)}
+                onClick={(e) => {
+                  deleteTriggerRef.current = e.currentTarget;
+                  setPendingDelete(activeConv.id);
+                }}
                 className={
                   "shrink-0 inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg " +
                   focusRing
@@ -1560,6 +1591,7 @@ export default function Screen() {
             aria-modal="true"
             aria-labelledby="del-title"
             aria-describedby="del-desc"
+            onKeyDown={onDeleteDialogKeyDown}
             className="w-full max-w-md rounded-xl p-6"
             style={{ backgroundColor: t.panel, border: "1px solid " + t.border }}
           >
@@ -1578,7 +1610,7 @@ export default function Screen() {
               <button
                 type="button"
                 ref={cancelRef}
-                onClick={() => setPendingDelete(null)}
+                onClick={closeDeleteDialog}
                 className={"text-sm px-4 py-2 rounded-lg " + focusRing}
                 style={fx({ color: t.text, border: "1px solid " + t.border })}
               >
@@ -1586,9 +1618,10 @@ export default function Screen() {
               </button>
               <button
                 type="button"
+                ref={confirmDeleteRef}
                 onClick={confirmDelete}
                 className={"text-sm font-medium px-4 py-2 rounded-lg " + focusRing}
-                style={fx({ backgroundColor: "#E2544A", color: "#FFFFFF" })}
+                style={fx({ backgroundColor: "#C43F36", color: "#FFFFFF" })}
               >
                 Delete conversation
               </button>

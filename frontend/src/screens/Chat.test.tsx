@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -239,6 +239,87 @@ describe("Chat", () => {
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
   });
 
+  it("AC-084: the delete-conversation dialog traps Tab focus and returns focus to the trigger on close", async () => {
+    await renderChat(() => [
+      frame("token", { text: "An answer." }),
+      frame("done", { conversation_id: "c-server-del", is_general_knowledge: false }),
+    ]);
+
+    await userEvent.type(screen.getByLabelText("Your question"), "What is the remote work policy?");
+    await userEvent.click(screen.getByRole("button", { name: /^Send$/ }));
+    await waitFor(() => expect(screen.getByText("An answer.")).toBeInTheDocument());
+
+    const deleteTrigger = screen.getByRole("button", { name: /Delete chat/ });
+    await userEvent.click(deleteTrigger);
+
+    const dialog = await screen.findByRole("dialog");
+    const cancelBtn = within(dialog).getByRole("button", { name: "Cancel" });
+    const confirmBtn = within(dialog).getByRole("button", { name: "Delete conversation" });
+    await waitFor(() => expect(cancelBtn).toHaveFocus());
+
+    // Shift+Tab from the first control wraps to the last.
+    await userEvent.tab({ shift: true });
+    expect(confirmBtn).toHaveFocus();
+
+    // Tab from the last control wraps back to the first.
+    await userEvent.tab();
+    expect(cancelBtn).toHaveFocus();
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(deleteTrigger).toHaveFocus());
+  });
+
+  it("AC-083: Stop replaces Send while streaming, and Space activates it from the keyboard", async () => {
+    let unblock: (() => void) | null = null;
+    const blocked = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    const encoder = new TextEncoder();
+    const streamBody = new ReadableStream({
+      async pull(controller) {
+        controller.enqueue(encoder.encode(frame("token", { text: "Partial…" })));
+        await blocked;
+        controller.enqueue(
+          encoder.encode(frame("done", { conversation_id: "c-stop-1", is_general_knowledge: false })),
+        );
+        controller.close();
+      },
+    });
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes("/api/auth/me")) {
+        return Promise.resolve(
+          jsonResponse(200, { user: SIGNED_IN_USER, self_registration_enabled: true }),
+        );
+      }
+      if (url.includes("/api/chat") && init?.method === "POST") {
+        return Promise.resolve({ ok: true, status: 200, body: streamBody });
+      }
+      return Promise.resolve(jsonResponse(404, { detail: "not found" }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText(/Hello, Satya/)).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText("Your question"), "What is the remote work policy?");
+    await userEvent.click(screen.getByRole("button", { name: /^Send$/ }));
+
+    const stopBtn = await screen.findByRole("button", { name: "Stop" });
+    stopBtn.focus();
+    expect(stopBtn).toHaveFocus();
+    await userEvent.keyboard(" ");
+
+    await waitFor(() => expect(screen.getByText(/stopped/i)).toBeInTheDocument());
+    await act(async () => {
+      unblock?.();
+      await Promise.resolve();
+    });
+  });
+
   it("AC-073: New chat shows the welcome screen and keeps the previous conversation in history", async () => {
     await renderChat(() => [
       frame("token", { text: "An answer." }),
@@ -253,8 +334,6 @@ describe("Chat", () => {
 
     await waitFor(() => expect(screen.getByText(/Hello, Satya/)).toBeInTheDocument());
     const historyList = screen.getByRole("list", { name: "Today" });
-    expect(
-      within(historyList).getByText("What is the remote work policy?"),
-    ).toBeInTheDocument();
+    expect(within(historyList).getByText("What is the remote work policy?")).toBeInTheDocument();
   });
 });

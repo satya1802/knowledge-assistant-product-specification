@@ -480,6 +480,29 @@ describe("KnowledgeBase", () => {
     clickSpy.mockRestore();
   });
 
+  it("AC-085: respects a persisted Light theme choice instead of staying dark-only", async () => {
+    window.localStorage.setItem("ka-theme", "light");
+    await renderKnowledgeBase({
+      "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
+    });
+    await waitFor(() => expect(screen.getByText("Employee-Handbook.pdf")).toBeInTheDocument());
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    const heading = screen.getByRole("heading", { name: "Knowledge base" });
+    // The page root is themed (not hardcoded dark), so its ancestor carries
+    // the light background rather than the dark-only `#101418`.
+    const root = heading.closest("div")!;
+    let node: HTMLElement | null = root;
+    let sawLightBg = false;
+    while (node) {
+      if (node.style.backgroundColor === "rgb(245, 248, 251)") sawLightBg = true;
+      node = node.parentElement;
+    }
+    expect(sawLightBg).toBe(true);
+
+    window.localStorage.removeItem("ka-theme");
+  });
+
   it("a failed download shows the server's own detail text inline", async () => {
     await renderKnowledgeBase({
       "/api/documents": { status: 200, body: documentsListResponse([DOC_READY]) },
