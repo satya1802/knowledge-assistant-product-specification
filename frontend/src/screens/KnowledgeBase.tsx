@@ -33,7 +33,12 @@ const C = {
 const FOCUS =
   "focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900";
 
-const ALLOWED_TYPES: Record<string, string> = { pdf: "PDF", docx: "DOCX", txt: "TXT", md: "Markdown" };
+const ALLOWED_TYPES: Record<string, string> = {
+  pdf: "PDF",
+  docx: "DOCX",
+  txt: "TXT",
+  md: "Markdown",
+};
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -150,7 +155,10 @@ export default function Screen() {
       })
       .catch((err) => {
         if (cancelled) return;
-        pushNotice("error", err instanceof Error ? err.message : "Could not load the knowledge base.");
+        pushNotice(
+          "error",
+          err instanceof Error ? err.message : "Could not load the knowledge base.",
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -230,7 +238,10 @@ export default function Screen() {
         })
         .catch((err) => {
           setDocuments((prev) => prev.filter((d) => d.id !== tempId));
-          pushNotice("error", err instanceof Error ? err.message : `“${file.name}” failed to upload.`);
+          pushNotice(
+            "error",
+            err instanceof Error ? err.message : `“${file.name}” failed to upload.`,
+          );
         });
     },
     [pushNotice, user],

@@ -108,7 +108,10 @@ export function deleteDocument(id: string): Promise<void> {
 /** POST /api/documents, one file per request so the caller gets real,
  * per-file upload progress via XHR's `upload.onprogress` -- `fetch` has no
  * equivalent for request-body upload progress. */
-export function uploadDocument(file: File, onProgress?: (pct: number) => void): Promise<UploadResult> {
+export function uploadDocument(
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_BASE_URL}/api/documents`);
@@ -133,7 +136,9 @@ export function uploadDocument(file: File, onProgress?: (pct: number) => void): 
       }
       if (xhr.status === 401 && unauthorizedHandler) unauthorizedHandler();
       const detail =
-        body && typeof body === "object" && typeof (body as { detail?: unknown }).detail === "string"
+        body &&
+        typeof body === "object" &&
+        typeof (body as { detail?: unknown }).detail === "string"
           ? (body as { detail: string }).detail
           : `POST /api/documents failed: ${xhr.status}`;
       reject(new ApiError(detail, xhr.status));
@@ -188,7 +193,8 @@ export function subscribeToDocumentStream(handlers: DocumentStreamHandlers): () 
   const handleStatus = (event: MessageEvent<string>) => {
     try {
       const data = JSON.parse(event.data) as Partial<DocumentRecord> & { id?: string };
-      if (data && typeof data.id === "string") handlers.onStatus?.(data as Partial<DocumentRecord> & { id: string });
+      if (data && typeof data.id === "string")
+        handlers.onStatus?.(data as Partial<DocumentRecord> & { id: string });
     } catch {
       // Not a JSON payload (e.g. a keep-alive comment) -- ignore it.
     }

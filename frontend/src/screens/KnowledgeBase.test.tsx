@@ -92,7 +92,9 @@ class FakeEventSource {
 
 class FakeXHR {
   static instances: FakeXHR[] = [];
-  upload: { onprogress: ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = {
+  upload: {
+    onprogress: ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null;
+  } = {
     onprogress: null,
   };
   onload: (() => void) | null = null;
@@ -221,7 +223,9 @@ describe("KnowledgeBase", () => {
     await renderKnowledgeBase({
       "/api/documents": { status: 200, body: documentsListResponse([]) },
     });
-    await waitFor(() => expect(screen.getByText("The knowledge base is empty")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("The knowledge base is empty")).toBeInTheDocument(),
+    );
 
     const dropzone = screen.getByText(/Drag files here/).closest("div")!;
     const badFile = makeFile("archive.zip", 1000, "application/zip");
@@ -242,7 +246,9 @@ describe("KnowledgeBase", () => {
         body: { ...documentsListResponse([]), max_upload_bytes: 1024 },
       },
     });
-    await waitFor(() => expect(screen.getByText("The knowledge base is empty")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("The knowledge base is empty")).toBeInTheDocument(),
+    );
 
     const dropzone = screen.getByText(/Drag files here/).closest("div")!;
     const bigFile = makeFile("big.pdf", 5000);
@@ -256,7 +262,9 @@ describe("KnowledgeBase", () => {
     await renderKnowledgeBase({
       "/api/documents": { status: 200, body: documentsListResponse([]) },
     });
-    await waitFor(() => expect(screen.getByText("The knowledge base is empty")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("The knowledge base is empty")).toBeInTheDocument(),
+    );
 
     const dropzone = screen.getByText(/Drag files here/).closest("div")!;
     const goodFile = makeFile("notes.txt", 500, "text/plain");
@@ -309,9 +317,7 @@ describe("KnowledgeBase", () => {
       });
     });
 
-    await waitFor(() =>
-      expect(screen.getByText("No extractable text found")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("No extractable text found")).toBeInTheDocument());
   });
 
   it("delete calls DELETE /api/documents/{id} and removes the row", async () => {
